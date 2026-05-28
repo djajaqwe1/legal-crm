@@ -1,0 +1,163 @@
+generator client {
+  provider = "prisma-client-js"
+  output   = "../lib/generated-client"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+/// Тенант: одна юр. практика / покупатель SaaS; изолирует данные CRM и настройки лендинга.
+model Workspace {
+  id        String   @id @default(cuid())
+  slug      String   @unique
+  name      String
+  settings  Json?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  clients      Client[]
+  legalObjects LegalObject[]
+  legalCases   LegalCase[]
+  contracts    Contract[]
+  chatMessages ChatMessage[]
+}
+
+model Client {
+  id                  String        @id @default(cuid())
+  workspaceId       String
+  name              String
+  manager           String
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+  email             String?
+  phone             String?
+  /// Scrypt-хэш пароля личного кабинета (salt:hash hex). null — вход ещё не активирован.
+  portalPasswordHash String?
+  contracts         Contract[]
+  cases             LegalCase[]
+  objects           LegalObject[]
+  chatMessages      ChatMessage[]
+  workspace         Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@unique([workspaceId, email])
+  @@index([workspaceId])
+}
+
+model LegalObject {
+  id          String      @id @default(cuid())
+  workspaceId String
+  name        String
+  clientId    String
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+  cases       LegalCase[]
+  client      Client      @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  workspace   Workspace   @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId])
+  @@index([clientId])
+}
+
+model LegalCase {
+  id          String         @id @default(cuid())
+  workspaceId String
+  code        String
+  title       String
+  status      CaseStatus     @default(NEW)
+  deadline    DateTime?
+  clientId    String
+  objectId    String?
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+  description String?
+  documents   CaseDocument[]
+  contracts   Contract[]
+  client      Client         @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  object      LegalObject?   @relation(fields: [objectId], references: [id])
+  tasks       Task[]
+  messages    ChatMessage[]
+  workspace   Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@unique([workspaceId, code])
+  @@index([workspaceId])
+}
+
+model Task {
+  id          String    @id @default(cuid())
+  title       String
+  dueDate     DateTime?
+  completed   Boolean   @default(false)
+  legalCaseId String
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  legalCase   LegalCase @relation(fields: [legalCaseId], references: [id], onDelete: Cascade)
+}
+
+model CaseDocument {
+  id          String    @id @default(cuid())
+  name        String
+  path        String
+  legalCaseId String
+  createdAt   DateTime  @default(now())
+  legalCase   LegalCase @relation(fields: [legalCaseId], references: [id], onDelete: Cascade)
+}
+
+model Contract {
+  id           String         @id @default(cuid())
+  workspaceId  String
+  number       String
+  counterparty String
+  bin_iin      String?
+  startDate    DateTime       @default(now())
+  endDate      DateTime?
+  type         String
+  status       ContractStatus @default(DRAFT)
+  clientId     String?
+  legalCaseId  String?
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+  client       Client?        @relation(fields: [clientId], references: [id], onDelete: SetNull)
+  legalCase    LegalCase?     @relation(fields: [legalCaseId], references: [id], onDelete: SetNull)
+  workspace    Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@unique([workspaceId, number])
+  @@index([workspaceId])
+}
+
+model ChatMessage {
+  id          String     @id @default(cuid())
+  workspaceId String
+  role        String
+  content     String     @db.Text
+  legalCaseId String?
+  /// Сообщения из ЛК клиента (подсчёт лимитов AI, история).
+  clientId    String?
+  contextType String     @default("case")
+  createdAt   DateTime   @default(now())
+  legalCase   LegalCase? @relation(fields: [legalCaseId], references: [id], onDelete: Cascade)
+  workspace   Workspace  @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  client      Client?    @relation(fields: [clientId], references: [id], onDelete: SetNull)
+
+  @@index([workspaceId, contextType])
+  @@index([legalCaseId])
+  @@index([clientId, contextType, createdAt])
+}
+
+enum CaseStatus {
+  NEW
+  IN_PROGRESS
+  COURT
+  ON_HOLD
+  CLOSED
+}
+
+enum ContractStatus {
+  DRAFT
+  NEGOTIATION
+  SIGNED
+  EXPIRING
+  ARCHIVED
+}
