@@ -13,10 +13,11 @@ export default async function PortalCasePage({ params }: Params) {
   if (!p) redirect("/portal/login");
   const { id } = await params;
 
-  let row: Awaited<ReturnType<typeof prisma.legalCase.findFirst>> & {
-    object?: { name: string } | null;
-    tasks?: { id: string; title: string; completed: boolean; dueDate: Date | null }[];
-  } | null = null;
+  type CaseRow = Awaited<ReturnType<typeof prisma.legalCase.findFirst>> & {
+    object: { name: string } | null;
+    tasks: { id: string; title: string; completed: boolean; dueDate: Date | null }[];
+  };
+  let row: CaseRow | null = null;
 
   try {
     row = await prisma.legalCase.findFirst({
