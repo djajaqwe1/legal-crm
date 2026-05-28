@@ -620,6 +620,8 @@ export type DashboardStats = {
   urgentCase: { id: string; code: string; title: string; client: string } | null;
   newLeadsToday: number;
   courtCasesList: Array<{ id: string; code: string; title: string; client: string }>;
+  /** Новые дела за последние 30 дней (для дельты на карточке дашборда) */
+  newCasesLast30Days: number;
   isOffline: boolean;
 };
 
@@ -637,6 +639,7 @@ export async function getDashboardStats(): Promise<DashboardStats> {
     urgentCase: null,
     newLeadsToday: 0,
     courtCasesList: [],
+    newCasesLast30Days: 0,
     isOffline: true,
   };
 
@@ -651,7 +654,9 @@ export async function getDashboardStats(): Promise<DashboardStats> {
     const todayStart = new Date();
     todayStart.setHours(0, 0, 0, 0);
 
-    const [cases, openTasksCount, totalClients, totalContracts, newLeadsToday] =
+    const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+
+    const [cases, openTasksCount, totalClients, totalContracts, newLeadsToday, newCasesLast30Days] =
       await Promise.all([
         prisma.legalCase.findMany({
           where: { workspaceId: wid },
@@ -675,6 +680,12 @@ export async function getDashboardStats(): Promise<DashboardStats> {
             workspaceId: wid,
             code: { startsWith: "LEAD-" },
             createdAt: { gte: todayStart },
+          },
+        }),
+        prisma.legalCase.count({
+          where: {
+            workspaceId: wid,
+            createdAt: { gte: thirtyDaysAgo },
           },
         }),
       ]);
@@ -731,6 +742,7 @@ export async function getDashboardStats(): Promise<DashboardStats> {
       urgentCase,
       newLeadsToday,
       courtCasesList,
+      newCasesLast30Days,
       isOffline: false,
     };
   } catch {

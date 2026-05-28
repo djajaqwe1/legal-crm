@@ -16,9 +16,43 @@ type DocBuilderHistoryItem = {
 
 const DOCUMENT_TYPES = [
   { id: "lawsuit", label: "Исковое заявление" },
-  { id: "contract", label: "Договор" },
+  { id: "contract", label: "Договор оказания услуг" },
   { id: "claim", label: "Претензия" },
   { id: "petition", label: "Ходатайство" },
+  { id: "appeal", label: "Апелляционная жалоба" },
+  { id: "response", label: "Возражение на исковое заявление" },
+  { id: "poa", label: "Доверенность" },
+  { id: "settlement", label: "Мировое соглашение" },
+];
+
+type QuickTemplate = { label: string; type: string; prompt: string };
+
+const QUICK_TEMPLATES: QuickTemplate[] = [
+  {
+    label: "💰 Взыскание долга",
+    type: "lawsuit",
+    prompt: "Истец: [Название компании/ФИО]. Ответчик: [Название компании/ФИО]. Суть: взыскание задолженности по договору поставки на сумму [сумма] тенге. Долг не погашен с [дата]. Прошу взыскать основной долг, пени и расходы на юруслуги.",
+  },
+  {
+    label: "🏠 Расторжение аренды",
+    type: "claim",
+    prompt: "Арендодатель: [ФИО/компания]. Арендатор: [ФИО/компания]. Объект аренды: [адрес]. Основание расторжения: систематическая неоплата аренды, задолженность за [N] месяцев. Прошу освободить помещение в течение 30 дней.",
+  },
+  {
+    label: "📝 Договор услуг",
+    type: "contract",
+    prompt: "Исполнитель: ТОО «Конгломерат Алтай» (юридические услуги). Заказчик: [ФИО/компания]. Предмет: юридическое представительство по делу [описание]. Стоимость: [сумма] тенге. Срок: [дата начала] — [дата окончания].",
+  },
+  {
+    label: "🏢 Корпоративный спор",
+    type: "lawsuit",
+    prompt: "Истец: [акционер/участник ТОО]. Ответчик: [компания]. Суть: нарушение прав участника — невыплата дивидендов / незаконное решение общего собрания / нарушение преимущественного права. Просим признать решение недействительным и взыскать убытки.",
+  },
+  {
+    label: "📋 Доверенность",
+    type: "poa",
+    prompt: "Доверитель: [ФИО, ИИН, адрес]. Представитель: [ФИО адвоката/юриста]. Полномочия: представлять интересы во всех судебных инстанциях РК, подписывать процессуальные документы, получать документы. Срок действия: 1 год.",
+  },
 ];
 
 function DocumentsBuilderContent() {
@@ -32,6 +66,7 @@ function DocumentsBuilderContent() {
   const [history, setHistory] = useState<DocBuilderHistoryItem[]>([]);
   const [isHistoryLoading, setIsHistoryLoading] = useState(true);
   const [isDownloading, setIsDownloading] = useState(false);
+  const [copied, setCopied] = useState(false);
 
   const loadHistory = useCallback(async () => {
     try {
@@ -192,6 +227,25 @@ function DocumentsBuilderContent() {
                 </div>
               )}
               <div className="space-y-2">
+                  <label className="text-sm font-medium text-zinc-700 dark:text-zinc-300">Быстрые шаблоны</label>
+                  <div className="flex flex-wrap gap-2">
+                    {QUICK_TEMPLATES.map((tpl) => (
+                      <button
+                        key={tpl.label}
+                        type="button"
+                        onClick={() => {
+                          setType(tpl.type);
+                          setPrompt(tpl.prompt);
+                        }}
+                        className="rounded-full border border-zinc-200 bg-zinc-50 px-3 py-1 text-xs font-medium text-zinc-700 hover:border-zinc-400 hover:bg-zinc-100 transition dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-700"
+                      >
+                        {tpl.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="space-y-2">
                   <label className="text-sm font-medium">Тип документа</label>
                   <select
                     value={type}
@@ -243,11 +297,13 @@ function DocumentsBuilderContent() {
                       variant="outline"
                       size="sm"
                       onClick={() => {
-                        navigator.clipboard.writeText(result);
-                        alert("Скопировано в буфер обмена");
+                        navigator.clipboard.writeText(result).then(() => {
+                          setCopied(true);
+                          window.setTimeout(() => setCopied(false), 2000);
+                        }).catch(() => null);
                       }}
                     >
-                      Копировать
+                      {copied ? "✓ Скопировано" : "Копировать"}
                     </Button>
                   </div>
                 )}

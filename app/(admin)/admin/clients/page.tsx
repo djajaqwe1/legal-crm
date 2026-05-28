@@ -10,6 +10,8 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { getClients } from "@/lib/crm-repository";
+
+type PageProps = { searchParams: Promise<{ q?: string }> };
 import { CreateObjectDialog } from "@/components/crm/create-object-dialog";
 import { portalAccessFromClient, portalAccessLabel } from "@/lib/portal-client-status";
 import { Badge } from "@/components/ui/badge";
@@ -19,8 +21,20 @@ import { Phone, MessageSquare, ChevronRight, Home, Users as UsersIcon, Search } 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
-export default async function ClientsPage() {
-  const clients = await getClients();
+export default async function ClientsPage({ searchParams }: PageProps) {
+  const { q } = await searchParams;
+  const query = (q ?? "").trim().toLowerCase();
+  const allClients = await getClients();
+
+  const clients = query
+    ? allClients.filter(
+        (c) =>
+          c.name.toLowerCase().includes(query) ||
+          (c.phone ?? "").toLowerCase().includes(query) ||
+          (c.email ?? "").toLowerCase().includes(query) ||
+          c.manager.toLowerCase().includes(query),
+      )
+    : allClients;
 
   return (
     <CrmShell>
@@ -46,12 +60,36 @@ export default async function ClientsPage() {
         </div>
       </header>
 
-      <div className="flex flex-col sm:flex-row gap-4 mb-6">
+      <form action="/admin/clients" method="get" className="flex flex-col sm:flex-row gap-4 mb-6">
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-400" />
-          <Input className="pl-10 bg-white" placeholder="Поиск по имени, телефону или менеджеру..." />
+          <Input
+            name="q"
+            defaultValue={q ?? ""}
+            className="pl-10 bg-white dark:bg-zinc-950"
+            placeholder="Поиск по имени, телефону, email или менеджеру..."
+          />
         </div>
-      </div>
+        <div className="flex gap-2 shrink-0">
+          <Button type="submit" variant="secondary" className="gap-2 bg-white dark:bg-zinc-900">
+            <Search className="h-4 w-4" />
+            Найти
+          </Button>
+          {query && (
+            <Link
+              href="/admin/clients"
+              className="inline-flex h-9 items-center rounded-lg border border-zinc-200 bg-white px-3 text-sm font-medium text-zinc-700 hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-900"
+            >
+              Сбросить
+            </Link>
+          )}
+        </div>
+      </form>
+      {query && (
+        <p className="text-sm text-zinc-500 mb-4">
+          По запросу «{q}» найдено клиентов: <strong>{clients.length}</strong>
+        </p>
+      )}
 
       <Card className="border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-900">
         <CardHeader>

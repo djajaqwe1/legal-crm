@@ -139,12 +139,24 @@ export default function LandingPage() {
                   <p className="text-3xl font-bold">10+</p>
                   <p className="text-sm text-zinc-400">Лет практики</p>
                 </div>
-                <div className="h-64 rounded-2xl bg-zinc-200" />
+                <div className="h-64 rounded-2xl bg-blue-600 p-6 text-white flex flex-col justify-between">
+                  <div className="text-4xl">⚖️</div>
+                  <div>
+                    <p className="text-2xl font-bold">190+</p>
+                    <p className="text-sm text-blue-200">Положительных отзывов от клиентов</p>
+                  </div>
+                </div>
               </div>
               <div className="space-y-4 pt-8">
-                <div className="h-64 rounded-2xl bg-zinc-800" />
-                <div className="h-48 rounded-2xl bg-zinc-100 p-6 flex flex-col justify-end">
-                  <p className="text-3xl font-bold text-zinc-900">500+</p>
+                <div className="h-64 rounded-2xl bg-indigo-950 p-6 text-white flex flex-col justify-between">
+                  <div className="text-4xl">🏆</div>
+                  <div>
+                    <p className="text-2xl font-bold">95%</p>
+                    <p className="text-sm text-indigo-300">Побед в судах первой инстанции</p>
+                  </div>
+                </div>
+                <div className="h-48 rounded-2xl bg-zinc-100 p-6 flex flex-col justify-end dark:bg-zinc-800">
+                  <p className="text-3xl font-bold text-zinc-900 dark:text-zinc-100">500+</p>
                   <p className="text-sm text-zinc-500">Успешных дел</p>
                 </div>
               </div>
@@ -158,11 +170,8 @@ export default function LandingPage() {
         <div className="container mx-auto px-4 md:px-6 text-center">
           <h2 className="text-3xl font-bold tracking-tight text-zinc-900">Основатель и эксперт</h2>
           <div className="mt-12 flex flex-col items-center">
-            <div className="h-32 w-32 rounded-full bg-zinc-100 mb-6 overflow-hidden">
-               {/* Здесь могла бы быть фотография */}
-               <div className="h-full w-full bg-zinc-200 flex items-center justify-center text-zinc-400">
-                 <Users className="h-12 w-12" />
-               </div>
+            <div className="h-32 w-32 rounded-full bg-gradient-to-br from-zinc-800 to-zinc-600 mb-6 flex items-center justify-center shadow-xl">
+              <span className="text-4xl font-bold text-white tracking-tight">РА</span>
             </div>
             <h3 className="text-2xl font-bold">Рустем Айкимбаев</h3>
             <p className="text-zinc-500 mt-2 italic">Юрист, представитель в суде</p>

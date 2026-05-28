@@ -134,10 +134,12 @@ export default async function Home() {
                 <p className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">Активные дела</p>
                 <div className="flex items-baseline gap-2">
                   <span className="text-3xl font-bold">{activeCases.length}</span>
-                  <span className="text-[10px] text-green-600 font-bold flex items-center">
-                    <ArrowUpRight className="h-3 w-3" />
-                    +2
-                  </span>
+                  {stats.newCasesLast30Days > 0 && !stats.isOffline && (
+                    <span className="text-[10px] text-green-600 font-bold flex items-center">
+                      <ArrowUpRight className="h-3 w-3" />
+                      +{stats.newCasesLast30Days} за 30 дн
+                    </span>
+                  )}
                 </div>
               </div>
               <div className="h-12 w-12 rounded-full bg-blue-50 flex items-center justify-center dark:bg-blue-900/20">
