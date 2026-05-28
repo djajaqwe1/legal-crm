@@ -13,13 +13,34 @@ export default async function PortalCasePage({ params }: Params) {
   if (!p) redirect("/portal/login");
   const { id } = await params;
 
-  const row = await prisma.legalCase.findFirst({
-    where: { id, workspaceId: p.workspaceId, clientId: p.clientId },
-    include: {
-      object: { select: { name: true } },
-      tasks: { orderBy: { createdAt: "desc" } },
-    },
-  });
+  let row: Awaited<ReturnType<typeof prisma.legalCase.findFirst>> & {
+    object?: { name: string } | null;
+    tasks?: { id: string; title: string; completed: boolean; dueDate: Date | null }[];
+  } | null = null;
+
+  try {
+    row = await prisma.legalCase.findFirst({
+      where: { id, workspaceId: p.workspaceId, clientId: p.clientId },
+      include: {
+        object: { select: { name: true } },
+        tasks: { orderBy: { createdAt: "desc" } },
+      },
+    });
+  } catch {
+    return (
+      <main className="mx-auto max-w-3xl space-y-4 px-4 py-8">
+        <Link href="/portal/dashboard" className="text-sm font-medium text-blue-600 hover:underline">
+          ← Все дела
+        </Link>
+        <div className="rounded-2xl border border-amber-200 bg-amber-50 p-6 text-center dark:border-amber-800 dark:bg-amber-900/20">
+          <p className="text-sm font-semibold text-amber-800 dark:text-amber-300">Данные временно недоступны</p>
+          <p className="mt-1 text-xs text-amber-700 dark:text-amber-400">
+            Попробуйте обновить страницу через несколько минут.
+          </p>
+        </div>
+      </main>
+    );
+  }
   if (!row) notFound();
 
   return (

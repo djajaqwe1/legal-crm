@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
 import { 
   LayoutDashboard, 
   Users, 
@@ -11,7 +12,8 @@ import {
   Compass, 
   Gavel, 
   BookOpen,
-  LogOut 
+  LogOut,
+  ExternalLink,
 } from "lucide-react";
 
 const navItems = [
@@ -31,6 +33,14 @@ const integrationItems = [
 export function CrmSidebar() {
   const pathname = usePathname();
   const router = useRouter();
+  const [dbOnline, setDbOnline] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    fetch("/api/health")
+      .then((r) => r.json())
+      .then((d) => setDbOnline(d?.db === true))
+      .catch(() => setDbOnline(false));
+  }, []);
 
   const handleLogout = async () => {
     await fetch("/api/auth/logout", { method: "POST" }).catch(() => {});
@@ -102,13 +112,40 @@ export function CrmSidebar() {
         </div>
       </div>
 
-      <button
-        onClick={handleLogout}
-        className="mt-auto flex w-full items-center gap-2 rounded-md px-3 py-2 text-sm text-zinc-500 transition hover:bg-red-50 hover:text-red-600"
-      >
-        <LogOut className="h-4 w-4" />
-        Выход
-      </button>
+      <div className="mt-auto space-y-1">
+        {/* DB indicator */}
+        {dbOnline !== null && (
+          <div className={`flex items-center gap-2 rounded-md px-3 py-2 text-xs ${
+            dbOnline
+              ? "text-green-600 dark:text-green-400"
+              : "text-amber-600 dark:text-amber-400"
+          }`}>
+            <span className={`h-2 w-2 shrink-0 rounded-full ${
+              dbOnline ? "bg-green-500" : "bg-amber-500 animate-pulse"
+            }`} />
+            {dbOnline ? "БД подключена" : "БД недоступна (демо)"}
+          </div>
+        )}
+
+        {/* Portal link */}
+        <Link
+          href="/portal/login"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="flex items-center gap-2 rounded-md px-3 py-2 text-sm text-zinc-500 transition hover:bg-zinc-100 hover:text-zinc-900 dark:hover:bg-zinc-900 dark:hover:text-zinc-100"
+        >
+          <ExternalLink className="h-4 w-4" />
+          Кабинет клиента
+        </Link>
+
+        <button
+          onClick={handleLogout}
+          className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-sm text-zinc-500 transition hover:bg-red-50 hover:text-red-600"
+        >
+          <LogOut className="h-4 w-4" />
+          Выход
+        </button>
+      </div>
     </aside>
   );
 }

@@ -4,7 +4,7 @@ import { useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Plus, CheckCircle2, FileText, Loader2, Upload, Download } from "lucide-react";
+import { Plus, CheckCircle2, FileText, Loader2, Upload, Download, Trash2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { Check } from "lucide-react";
 
@@ -49,6 +49,7 @@ export function DocumentItem({ doc }: { doc: Document }) {
 
 export function TaskItem({ task }: { task: Task }) {
   const [isUpdating, setIsUpdating] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
   const router = useRouter();
 
   async function toggleTask() {
@@ -67,12 +68,24 @@ export function TaskItem({ task }: { task: Task }) {
     }
   }
 
+  async function deleteTask() {
+    if (!confirm(`Удалить задачу "${task.title}"?`)) return;
+    setIsDeleting(true);
+    try {
+      await fetch(`/api/tasks/${task.id}`, { method: "DELETE" });
+      router.refresh();
+    } catch (error) {
+      console.error(error);
+      setIsDeleting(false);
+    }
+  }
+
   return (
-    <div className="flex items-center justify-between rounded-lg border border-zinc-100 p-3 hover:bg-zinc-50 transition-colors">
+    <div className="flex items-center justify-between rounded-lg border border-zinc-100 p-3 hover:bg-zinc-50 transition-colors group">
       <div className="flex items-center gap-3">
         <button
           onClick={toggleTask}
-          disabled={isUpdating}
+          disabled={isUpdating || isDeleting}
           className={`h-5 w-5 rounded-md border flex items-center justify-center transition-colors ${
             task.completed
               ? "bg-green-500 border-green-500 text-white"
@@ -91,6 +104,18 @@ export function TaskItem({ task }: { task: Task }) {
           </p>
         </div>
       </div>
+      <button
+        onClick={deleteTask}
+        disabled={isDeleting || isUpdating}
+        className="opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded text-zinc-400 hover:text-red-500 hover:bg-red-50"
+        title="Удалить задачу"
+      >
+        {isDeleting ? (
+          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+        ) : (
+          <Trash2 className="h-3.5 w-3.5" />
+        )}
+      </button>
     </div>
   );
 }

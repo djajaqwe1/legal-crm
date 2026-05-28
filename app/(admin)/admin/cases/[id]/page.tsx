@@ -7,6 +7,7 @@ import { caseStatusToRu } from "@/lib/case-status";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { AddTaskDialog, AddDocumentDialog, TaskItem, DocumentItem } from "@/components/crm/case-management-tools";
+import { CaseDescriptionEditor } from "@/components/crm/case-description-editor";
 import { CaseStatusControl } from "@/components/crm/case-status-control";
 import { CaseObjectControl } from "@/components/crm/case-object-control";
 import {
@@ -132,9 +133,7 @@ export default async function CaseDetailPage({ params }: PageProps) {
 
               <div className="space-y-2">
                 <p className="text-xs font-medium uppercase text-zinc-500">Описание / Суть дела</p>
-                <div className="rounded-lg bg-zinc-50 p-4 text-sm text-zinc-700 dark:bg-zinc-900 dark:text-zinc-300">
-                  {caseData.description || "Описание отсутствует"}
-                </div>
+                <CaseDescriptionEditor caseId={caseData.id} initialDescription={caseData.description ?? null} />
               </div>
             </CardContent>
           </Card>

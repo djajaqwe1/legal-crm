@@ -19,9 +19,10 @@ export async function PATCH(request: Request, { params }: Params) {
     const body = (await request.json()) as {
       status?: string;
       objectId?: string | null;
+      description?: string;
     };
 
-    const data: { status?: CaseStatus; objectId?: string | null } = {};
+    const data: { status?: CaseStatus; objectId?: string | null; description?: string } = {};
 
     const existing = await prisma.legalCase.findFirst({
       where: { id, workspaceId: wid },
@@ -57,9 +58,13 @@ export async function PATCH(request: Request, { params }: Params) {
       }
     }
 
+    if (body.description !== undefined) {
+      data.description = body.description;
+    }
+
     if (Object.keys(data).length === 0) {
       return NextResponse.json(
-        { error: "Provide status and/or objectId" },
+        { error: "Provide status, objectId and/or description" },
         { status: 400 },
       );
     }
