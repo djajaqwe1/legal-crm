@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Plus, Loader2 } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { VoiceInputButton } from "@/components/crm/voice-input-button";
 
 type ClientOption = {
   id: string;
@@ -29,6 +30,21 @@ export function CreateCaseForm({ clients }: CreateCaseFormProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const router = useRouter();
+
+  function handleVoiceParsed(data: {
+    title?: string;
+    status?: string;
+    deadline?: string;
+    clientId?: string;
+    description?: string;
+    suggestedCode?: string;
+  }) {
+    if (data.title) setTitle(data.title);
+    if (data.status) setStatus(data.status);
+    if (data.deadline) setDeadline(data.deadline);
+    if (data.clientId) setClientId(data.clientId);
+    if (data.suggestedCode) setCode(data.suggestedCode);
+  }
 
   useEffect(() => {
     if (!clientId) {
@@ -124,6 +140,15 @@ export function CreateCaseForm({ clients }: CreateCaseFormProps) {
           <DialogTitle>Регистрация нового дела</DialogTitle>
         </DialogHeader>
         <form onSubmit={onSubmit} className="space-y-4 py-4">
+          <VoiceInputButton clients={clients} onParsed={handleVoiceParsed} />
+          <div className="relative">
+            <div className="absolute inset-0 flex items-center">
+              <span className="w-full border-t border-zinc-100" />
+            </div>
+            <div className="relative flex justify-center text-[10px] uppercase">
+              <span className="bg-white px-2 text-zinc-400">или заполните вручную</span>
+            </div>
+          </div>
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
               <label className="text-xs font-bold uppercase text-zinc-500">Код дела</label>
