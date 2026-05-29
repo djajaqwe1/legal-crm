@@ -17,6 +17,7 @@ import { statusColorMap } from "@/lib/crm-data";
 import { Search, Filter as FilterIcon, MoreHorizontal, MessageSquare, ExternalLink } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import { VoiceCreateButton } from "@/components/crm/voice-create-button";
 
 type PageProps = {
   searchParams: Promise<{ q?: string }>;
@@ -49,6 +50,8 @@ export default async function CasesPage({ searchParams }: PageProps) {
           clients={clients.map((client) => ({ id: client.id, name: client.name }))}
         />
       </header>
+
+      <VoiceCreateButton />
 
       <form
         action="/admin/cases"
