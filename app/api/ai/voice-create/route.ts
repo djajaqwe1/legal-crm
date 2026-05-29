@@ -91,7 +91,6 @@ export async function POST(req: Request) {
           workspaceId: wid,
           clientId: client.id,
           name: parsed.objectName.trim(),
-          type: "Иное",
         },
       });
       objectId = obj.id;
