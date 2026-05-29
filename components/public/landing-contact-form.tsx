@@ -19,17 +19,14 @@ export function LandingContactForm() {
     setError(null);
 
     try {
-      const response = await fetch("/api/public/consult", {
+      const response = await fetch("/api/public/lead", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ 
-          message: `КЛИЕНТ ОСТАВИЛ ЗАЯВКУ ЧЕРЕЗ ФОРМУ:\nИмя: ${name}\nТелефон: ${phone}\n[LEAD_CAPTURE: {"name": "${name}", "phone": "${phone}", "summary": "Заявка через форму на сайте"}]`,
-          history: [] 
-        }),
+        body: JSON.stringify({ name, phone }),
       });
 
       if (!response.ok) throw new Error("Ошибка при отправке");
-      
+
       setIsSuccess(true);
       setName("");
       setPhone("");
