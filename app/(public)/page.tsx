@@ -1,16 +1,26 @@
-"use client";
-
 import Link from "next/link";
-import { Button, buttonVariants } from "@/components/ui/button";
-import { AiSalesWidget } from "@/components/public/ai-sales-widget";
+import { buttonVariants } from "@/components/ui/button";
 import { LandingContactForm } from "@/components/public/landing-contact-form";
+import { AiWidgetTrigger } from "@/components/public/ai-widget-trigger";
 import { Scale, Shield, FileText, Users, Award, CheckCircle2 } from "lucide-react";
-import { useState } from "react";
 import { cn } from "@/lib/utils";
 
-export default function LandingPage() {
-  const [isAiOpen, setIsAiOpen] = useState(false);
+const SERVICES = [
+  { title: "Гражданские споры", desc: "Защита прав собственности, взыскание долгов и договорные обязательства.", icon: Scale },
+  { title: "Хозяйственные дела", desc: "Арбитражные споры между юридическими лицами и защита бизнеса.", icon: FileText },
+  { title: "Семейное право", desc: "Раздел имущества, алименты и сложные бракоразводные процессы.", icon: Users },
+  { title: "Представительство", desc: "Участие во всех судебных инстанциях Республики Казахстан.", icon: Award },
+  { title: "LegalTech аудит", desc: "Внедрение систем автоматизации юридических процессов для компаний.", icon: Shield },
+  { title: "Договорная работа", desc: "Разработка сложных контрактов и проверка юридической чистоты сделок.", icon: CheckCircle2 },
+];
 
+const RESULTS = [
+  "95% выигранных дел в судах первой инстанции",
+  "Свыше 1 млрд тенге взыскано в пользу клиентов",
+  "Работаем по всему Казахстану и в СНГ",
+];
+
+export default function LandingPage() {
   return (
     <div className="relative">
       {/* Hero Section */}
@@ -19,7 +29,7 @@ export default function LandingPage() {
           <div className="absolute -left-20 -top-20 h-96 w-96 rounded-full bg-blue-600 blur-[120px]" />
           <div className="absolute -right-20 bottom-0 h-96 w-96 rounded-full bg-indigo-600 blur-[120px]" />
         </div>
-        
+
         <div className="container relative z-10 mx-auto px-4 md:px-6">
           <div className="flex flex-col items-center text-center lg:items-start lg:text-left">
             <div className="inline-flex items-center rounded-full border border-zinc-800 bg-zinc-900/50 px-3 py-1 text-sm font-medium text-blue-400">
@@ -34,16 +44,17 @@ export default function LandingPage() {
               ТОО «Конгломерат Алтай» — инновационный подход к юридическим спорам. Мы объединяем многолетний опыт и современные технологии LegalTech для достижения результата.
             </p>
             <div className="mt-10 flex flex-col gap-4 sm:flex-row sm:flex-wrap">
-              <Button 
-                size="lg" 
-                className="h-12 rounded-full bg-white px-8 text-zinc-950 hover:bg-zinc-200"
-                onClick={() => setIsAiOpen(true)}
+              {/* Client component for AI widget + button */}
+              <AiWidgetTrigger />
+              <Link
+                href="#services"
+                className={cn(
+                  buttonVariants({ size: "lg", variant: "outline" }),
+                  "h-12 rounded-full border-zinc-800 bg-zinc-900 px-8 text-white hover:bg-zinc-800",
+                )}
               >
-                Бесплатная консультация
-              </Button>
-              <Button size="lg" variant="outline" className="h-12 rounded-full border-zinc-800 bg-zinc-900 px-8 text-white hover:bg-zinc-800">
                 Посмотреть кейсы
-              </Button>
+              </Link>
               <Link
                 href="/portal"
                 className={cn(
@@ -65,41 +76,10 @@ export default function LandingPage() {
             <h2 className="text-3xl font-bold tracking-tight text-zinc-900 sm:text-4xl">Специализация</h2>
             <p className="mt-4 text-zinc-600">Широкий спектр юридических услуг для бизнеса и частных лиц</p>
           </div>
-          
+
           <div className="mt-16 grid gap-8 sm:grid-cols-2 lg:grid-cols-3">
-            {[
-              { 
-                title: "Гражданские споры", 
-                desc: "Защита прав собственности, взыскание долгов и договорные обязательства.",
-                icon: Scale
-              },
-              { 
-                title: "Хозяйственные дела", 
-                desc: "Арбитражные споры между юридическими лицами и защита бизнеса.",
-                icon: FileText
-              },
-              { 
-                title: "Семейное право", 
-                desc: "Раздел имущества, алименты и сложные бракоразводные процессы.",
-                icon: Users
-              },
-              { 
-                title: "Представительство", 
-                desc: "Участие во всех судебных инстанциях Республики Казахстан.",
-                icon: Award
-              },
-              { 
-                title: "LegalTech аудит", 
-                desc: "Внедрение систем автоматизации юридических процессов для компаний.",
-                icon: Shield
-              },
-              { 
-                title: "Договорная работа", 
-                desc: "Разработка сложных контрактов и проверка юридической чистоты сделок.",
-                icon: CheckCircle2
-              }
-            ].map((service, i) => (
-              <div key={i} className="group relative rounded-2xl border border-zinc-100 bg-zinc-50 p-8 transition-all hover:shadow-lg">
+            {SERVICES.map((service) => (
+              <div key={service.title} className="group relative rounded-2xl border border-zinc-100 bg-zinc-50 p-8 transition-all hover:shadow-lg">
                 <div className="mb-4 inline-flex h-12 w-12 items-center justify-center rounded-lg bg-zinc-900 text-white transition-transform group-hover:scale-110">
                   <service.icon className="h-6 w-6" />
                 </div>
@@ -121,12 +101,8 @@ export default function LandingPage() {
                 За годы практики мы помогли сотням клиентов восстановить справедливость и защитить свои активы. Наша репутация подтверждена реальными результатами и отзывами.
               </p>
               <div className="mt-10 space-y-4">
-                {[
-                  "95% выигранных дел в судах первой инстанции",
-                  "Свыше 1 млрд тенге взыскано в пользу клиентов",
-                  "Работаем по всему Казахстану и в СНГ"
-                ].map((item, i) => (
-                  <div key={i} className="flex items-center gap-3">
+                {RESULTS.map((item) => (
+                  <div key={item} className="flex items-center gap-3">
                     <CheckCircle2 className="h-5 w-5 text-green-600" />
                     <span className="font-medium text-zinc-900">{item}</span>
                   </div>
@@ -155,8 +131,8 @@ export default function LandingPage() {
                     <p className="text-sm text-indigo-300">Побед в судах первой инстанции</p>
                   </div>
                 </div>
-                <div className="h-48 rounded-2xl bg-zinc-100 p-6 flex flex-col justify-end dark:bg-zinc-800">
-                  <p className="text-3xl font-bold text-zinc-900 dark:text-zinc-100">500+</p>
+                <div className="h-48 rounded-2xl bg-zinc-100 p-6 flex flex-col justify-end">
+                  <p className="text-3xl font-bold text-zinc-900">500+</p>
                   <p className="text-sm text-zinc-500">Успешных дел</p>
                 </div>
               </div>
@@ -176,9 +152,9 @@ export default function LandingPage() {
             <h3 className="text-2xl font-bold">Рустем Айкимбаев</h3>
             <p className="text-zinc-500 mt-2 italic">Юрист, представитель в суде</p>
             <div className="mt-8 flex gap-4">
-              <a href="https://www.instagram.com/rustemaikimbaev/" target="_blank" className="text-sm text-blue-600 hover:underline">Instagram</a>
-              <a href="https://www.tiktok.com/@rustem.aik_" target="_blank" className="text-sm text-blue-600 hover:underline">TikTok</a>
-              <a href="https://www.linkedin.com/in/рустем-айкимбаев-788b9180/" target="_blank" className="text-sm text-blue-600 hover:underline">LinkedIn</a>
+              <a href="https://www.instagram.com/rustemaikimbaev/" target="_blank" rel="noopener noreferrer" className="text-sm text-blue-600 hover:underline">Instagram</a>
+              <a href="https://www.tiktok.com/@rustem.aik_" target="_blank" rel="noopener noreferrer" className="text-sm text-blue-600 hover:underline">TikTok</a>
+              <a href="https://www.linkedin.com/in/%D1%80%D1%83%D1%81%D1%82%D0%B5%D0%BC-%D0%B0%D0%B9%D0%BA%D0%B8%D0%BC%D0%B1%D0%B0%D0%B5%D0%B2-788b9180/" target="_blank" rel="noopener noreferrer" className="text-sm text-blue-600 hover:underline">LinkedIn</a>
             </div>
           </div>
         </div>
@@ -194,9 +170,6 @@ export default function LandingPage() {
           </div>
         </div>
       </section>
-
-      {/* AI Widget */}
-      <AiSalesWidget isOpen={isAiOpen} setIsOpen={setIsAiOpen} />
     </div>
   );
 }
