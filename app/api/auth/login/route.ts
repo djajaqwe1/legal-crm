@@ -41,7 +41,7 @@ export async function POST(request: Request) {
     secure: process.env.NODE_ENV === "production",
     sameSite: "lax",
     path: "/",
-    maxAge: 60 * 60 * 24,
+    maxAge: 60 * 60 * 24 * 7, // 7 days
   });
   try {
     const slug = process.env.DEFAULT_WORKSPACE_SLUG ?? DEFAULT_WORKSPACE_SLUG;
