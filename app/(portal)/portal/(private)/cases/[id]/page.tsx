@@ -5,6 +5,15 @@ import { readPortalPayload } from "@/lib/portal-session-server";
 import { redirect } from "next/navigation";
 import { caseStatusToRu } from "@/lib/case-status";
 import { PortalAiChatPanel } from "@/components/portal/portal-ai-chat-panel";
+import { ArrowLeft, Calendar, CheckCircle2, Circle, MapPin } from "lucide-react";
+
+const STATUS_COLORS: Record<string, string> = {
+  "Новый": "bg-zinc-100 text-zinc-600",
+  "В работе": "bg-blue-50 text-blue-700",
+  "Суд": "bg-violet-50 text-violet-700",
+  "Пауза": "bg-amber-50 text-amber-700",
+  "Завершено": "bg-green-50 text-green-700",
+};
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -13,25 +22,24 @@ export default async function PortalCasePage({ params }: Params) {
   if (!p) redirect("/portal/login");
   const { id } = await params;
 
-  type CaseRow = Awaited<ReturnType<typeof prisma.legalCase.findFirst>> & {
-    object: { name: string } | null;
-    tasks: { id: string; title: string; completed: boolean; dueDate: Date | null }[];
-  };
-  let row: CaseRow | null = null;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let row: any = null;
 
   try {
     row = await prisma.legalCase.findFirst({
       where: { id, workspaceId: p.workspaceId, clientId: p.clientId },
       include: {
         object: { select: { name: true } },
-        tasks: { orderBy: { createdAt: "desc" } },
+        tasks: { orderBy: { createdAt: "asc" } },
+        documents: { orderBy: { createdAt: "desc" }, take: 10 },
       },
     });
   } catch {
     return (
       <main className="mx-auto max-w-3xl space-y-4 px-4 py-8">
-        <Link href="/portal/dashboard" className="text-sm font-medium text-blue-600 hover:underline">
-          ← Все дела
+        <Link href="/portal/dashboard" className="inline-flex items-center gap-1 text-sm font-medium text-blue-600 hover:underline">
+          <ArrowLeft className="h-3 w-3" />
+          Все дела
         </Link>
         <div className="rounded-2xl border border-amber-200 bg-amber-50 p-6 text-center dark:border-amber-800 dark:bg-amber-900/20">
           <p className="text-sm font-semibold text-amber-800 dark:text-amber-300">Данные временно недоступны</p>
@@ -44,44 +52,102 @@ export default async function PortalCasePage({ params }: Params) {
   }
   if (!row) notFound();
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const statusRu = (caseStatusToRu as any)[row.status] ?? "Новый";
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const doneTasks = (row.tasks as any[]).filter((t: any) => t.completed).length;
+  const totalTasks = row.tasks.length;
+
   return (
     <main className="mx-auto max-w-3xl space-y-6 px-4 py-8">
-      <Link href="/portal/dashboard" className="text-sm font-medium text-blue-600 hover:underline">
-        ← Все дела
+      <Link href="/portal/dashboard" className="inline-flex items-center gap-1.5 text-sm font-medium text-blue-600 hover:underline">
+        <ArrowLeft className="h-3.5 w-3.5" />
+        Все дела
       </Link>
-      <header className="space-y-1">
-        <p className="font-mono text-xs text-zinc-500">{row.code}</p>
-        <h1 className="text-xl font-bold text-zinc-900 dark:text-zinc-50">{row.title}</h1>
-        <p className="text-sm text-zinc-600 dark:text-zinc-400">Статус: {caseStatusToRu[row.status]}</p>
-        {row.object?.name ? (
-          <p className="text-sm text-zinc-600 dark:text-zinc-400">Объект: {row.object.name}</p>
-        ) : null}
-        {row.deadline ? (
-          <p className="text-sm text-zinc-600 dark:text-zinc-400">
-            Срок: {row.deadline.toLocaleDateString("ru-RU")}
-          </p>
-        ) : null}
-        {row.description ? (
-          <div className="mt-4 rounded-xl border border-zinc-200 bg-white p-4 text-sm text-zinc-800 dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-200">
-            <p className="whitespace-pre-wrap">{row.description}</p>
+
+      <header className="rounded-2xl border border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-950 p-6 space-y-4">
+        <div className="flex items-start justify-between gap-3 flex-wrap">
+          <div className="space-y-1">
+            <span className="font-mono text-xs text-zinc-400">{row.code}</span>
+            <h1 className="text-xl font-bold text-zinc-900 dark:text-zinc-50">{row.title}</h1>
           </div>
-        ) : null}
+          <span className={`text-[11px] font-bold uppercase tracking-wider px-3 py-1.5 rounded-full shrink-0 ${STATUS_COLORS[statusRu] ?? STATUS_COLORS["Новый"]}`}>
+            {statusRu}
+          </span>
+        </div>
+
+        <div className="flex flex-wrap gap-4 text-sm">
+          {row.object?.name && (
+            <div className="flex items-center gap-1.5 text-zinc-600 dark:text-zinc-400">
+              <MapPin className="h-3.5 w-3.5 text-zinc-400" />
+              {row.object.name}
+            </div>
+          )}
+          {row.deadline && (
+            <div className="flex items-center gap-1.5 text-zinc-600 dark:text-zinc-400">
+              <Calendar className="h-3.5 w-3.5 text-zinc-400" />
+              Срок: {row.deadline.toLocaleDateString("ru-RU")}
+            </div>
+          )}
+        </div>
+
+        {row.description && (
+          <div className="rounded-lg bg-zinc-50 dark:bg-zinc-900 border border-zinc-100 dark:border-zinc-800 p-4 text-sm text-zinc-700 dark:text-zinc-300">
+            <p className="whitespace-pre-wrap leading-relaxed">{row.description}</p>
+          </div>
+        )}
       </header>
 
-      {row.tasks.length > 0 ? (
-        <section>
-          <h2 className="text-sm font-semibold text-zinc-900 dark:text-zinc-50">Задачи</h2>
-          <ul className="mt-2 space-y-1 text-sm text-zinc-700 dark:text-zinc-300">
-            {row.tasks.map((t) => (
-              <li key={t.id}>
-                {t.completed ? "✓ " : "○ "}
-                {t.title}
-                {t.dueDate ? ` — до ${t.dueDate.toLocaleDateString("ru-RU")}` : ""}
+      {totalTasks > 0 && (
+        <section className="rounded-2xl border border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-950 p-5">
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="text-sm font-bold text-zinc-900 dark:text-zinc-50 flex items-center gap-2">
+              <CheckCircle2 className="h-4 w-4 text-zinc-400" />
+              Задачи по делу
+            </h2>
+            <span className="text-xs text-zinc-500">{doneTasks}/{totalTasks} выполнено</span>
+          </div>
+
+          {/* Progress bar */}
+          <div className="mb-4 h-1.5 rounded-full bg-zinc-100 dark:bg-zinc-800 overflow-hidden">
+            <div
+              className="h-full rounded-full bg-green-500 transition-all"
+              style={{ width: `${totalTasks > 0 ? Math.round(doneTasks / totalTasks * 100) : 0}%` }}
+            />
+          </div>
+
+          <ul className="space-y-2">
+            {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
+            {(row.tasks as any[]).map((t: any) => (
+              <li key={t.id} className={`flex items-start gap-2.5 text-sm ${t.completed ? "opacity-60" : ""}`}>
+                {t.completed
+                  ? <CheckCircle2 className="h-4 w-4 text-green-500 shrink-0 mt-0.5" />
+                  : <Circle className="h-4 w-4 text-zinc-300 dark:text-zinc-600 shrink-0 mt-0.5" />
+                }
+                <span className={`${t.completed ? "line-through text-zinc-500" : "text-zinc-800 dark:text-zinc-200"}`}>
+                  {t.title}
+                  {t.dueDate && <span className="ml-2 text-[11px] text-zinc-400">до {t.dueDate.toLocaleDateString("ru-RU")}</span>}
+                </span>
               </li>
             ))}
           </ul>
         </section>
-      ) : null}
+      )}
+
+      {row.documents.length > 0 && (
+        <section className="rounded-2xl border border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-950 p-5">
+          <h2 className="text-sm font-bold text-zinc-900 dark:text-zinc-50 mb-3">Документы по делу</h2>
+          <ul className="space-y-1.5">
+            {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
+            {(row.documents as any[]).map((doc: any) => (
+              <li key={doc.id} className="flex items-center gap-2 text-sm text-zinc-700 dark:text-zinc-300">
+                <span className="text-zinc-400">📄</span>
+                <span>{doc.name}</span>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
 
       <PortalAiChatPanel
         endpoint={`/api/portal/cases/${row.id}/ai`}
