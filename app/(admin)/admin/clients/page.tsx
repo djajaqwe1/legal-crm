@@ -109,6 +109,15 @@ export default async function ClientsPage({ searchParams }: PageProps) {
               </TableRow>
             </TableHeader>
             <TableBody>
+              {clients.length === 0 && (
+                <TableRow>
+                  <TableCell colSpan={7} className="h-32 text-center text-zinc-500 italic">
+                    {query
+                      ? `По запросу «${query}» клиентов не найдено. Проверьте написание.`
+                      : "Клиентов пока нет. Нажмите «Новый клиент», чтобы добавить первого."}
+                  </TableCell>
+                </TableRow>
+              )}
               {clients.map((client) => {
                 const pa = portalAccessFromClient({
                   email: client.email,

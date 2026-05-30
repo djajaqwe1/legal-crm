@@ -110,7 +110,7 @@ export function PageAssistantPanel({ pageContext }: Props) {
       } else {
         setPendingAction(null);
         // Refresh page if a mutating action completed
-        if (data.toolUsed && ["create_case", "create_client", "update_case"].includes(data.toolUsed)) {
+        if (data.toolUsed && ["create_case", "create_client", "update_case", "create_contract"].includes(data.toolUsed)) {
           router.refresh();
         }
       }

@@ -138,8 +138,8 @@ export default async function CasesPage({ searchParams }: PageProps) {
               {cases.length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={7} className="h-32 text-center text-zinc-500 italic">
-                    {query
-                      ? `По запросу «${q}» ничего не найдено.`
+                    {hasFilter
+                      ? `Ничего не найдено${statusFilter ? ` со статусом «${statusFilter}»` : ""}${query ? ` по запросу «${q}»` : ""}. Попробуйте изменить фильтры.`
                       : "Дела ещё не созданы. Нажмите «Создать новое дело», чтобы начать."}
                   </TableCell>
                 </TableRow>
