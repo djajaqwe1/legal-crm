@@ -13,6 +13,7 @@ type Message = {
   id: string;
   role: "user" | "assistant";
   content: string;
+  isError?: boolean;
   toolUsed?: string;
   toolResult?: ToolResult;
   pendingAction?: { toolName: string; args: Record<string, unknown> };
@@ -177,7 +178,8 @@ export function JarvisChat() {
         setMessages(prev => [...prev, {
           id: Date.now().toString(),
           role: "assistant",
-          content: `Ошибка: ${data.error}`,
+          content: data.error,
+          isError: true,
         }]);
         return;
       }
@@ -320,8 +322,11 @@ export function JarvisChat() {
               <div className={`rounded-2xl px-4 py-3 text-sm leading-relaxed ${
                 msg.role === "user"
                   ? "bg-blue-600 text-white rounded-tr-sm"
-                  : "bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 text-zinc-800 dark:text-zinc-100 rounded-tl-sm shadow-sm"
+                  : msg.isError
+                    ? "bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-800 dark:text-red-300 rounded-tl-sm"
+                    : "bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 text-zinc-800 dark:text-zinc-100 rounded-tl-sm shadow-sm"
               }`}>
+                {msg.isError && <span className="font-bold mr-1">⚠</span>}
                 {msg.content}
               </div>
 

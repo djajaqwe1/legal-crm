@@ -399,6 +399,13 @@ export async function POST(req: Request) {
     });
   } catch (error: unknown) {
     const msg = error instanceof Error ? error.message : "Server error";
+    // Handle quota/rate-limit errors gracefully
+    if (msg.includes("429") || msg.includes("Too Many Requests") || msg.includes("RESOURCE_EXHAUSTED") || msg.includes("QuotaFailure")) {
+      return NextResponse.json(
+        { error: "Превышен лимит запросов к AI (бесплатный тариф Gemini). Подождите 1-2 минуты и попробуйте снова." },
+        { status: 429 },
+      );
+    }
     return NextResponse.json({ error: msg }, { status: 500 });
   }
 }
