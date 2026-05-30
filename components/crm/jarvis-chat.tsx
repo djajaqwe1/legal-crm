@@ -220,10 +220,13 @@ export function JarvisChat() {
       };
 
       if (data.error) {
+        const isQuota = res.status === 429 || (data.error ?? "").includes("лимит");
         setMessages(prev => [...prev, {
           id: Date.now().toString(),
           role: "assistant" as const,
-          content: data.error ?? "Неизвестная ошибка",
+          content: isQuota
+            ? "⏳ Превышен лимит Gemini API. Подождите 1-2 минуты и попробуйте снова.\n\nЕсли ошибка повторяется — создайте новый API ключ на aistudio.google.com и обновите переменную GEMINI_API_KEY в Vercel."
+            : (data.error ?? "Неизвестная ошибка"),
           isError: true,
         }]);
         return;
@@ -373,7 +376,17 @@ export function JarvisChat() {
                     : "bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 text-zinc-800 dark:text-zinc-100 rounded-tl-sm shadow-sm"
               }`}>
                 {msg.isError && <span className="font-bold mr-1">⚠</span>}
-                {msg.content}
+                <span className="whitespace-pre-wrap">{msg.content}</span>
+                {msg.isError && msg.content.includes("aistudio") && (
+                  <a
+                    href="https://aistudio.google.com/apikey"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="mt-2 flex items-center gap-1 text-xs font-bold text-red-700 dark:text-red-400 underline"
+                  >
+                    → Открыть Google AI Studio
+                  </a>
+                )}
               </div>
 
               {msg.toolResult && <ResultCard toolName={msg.toolUsed!} data={msg.toolResult} />}
