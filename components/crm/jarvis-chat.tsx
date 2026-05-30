@@ -177,8 +177,8 @@ export function JarvisChat() {
       if (data.error) {
         setMessages(prev => [...prev, {
           id: Date.now().toString(),
-          role: "assistant",
-          content: data.error,
+          role: "assistant" as const,
+          content: data.error ?? "Неизвестная ошибка",
           isError: true,
         }]);
         return;
