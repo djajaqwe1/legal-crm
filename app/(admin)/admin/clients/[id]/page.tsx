@@ -50,7 +50,7 @@ export default async function ClientDetailPage({ params }: PageProps) {
       <header className="space-y-4 mb-8">
         <nav className="flex flex-wrap items-center gap-2 text-xs font-medium text-zinc-500 uppercase tracking-wider">
           <Link
-            href="/admin"
+            href="/admin/dashboard"
             className="hover:text-zinc-900 transition-colors flex items-center gap-1"
           >
             <Home className="h-3 w-3" />

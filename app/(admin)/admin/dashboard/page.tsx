@@ -220,7 +220,7 @@ export default async function Home() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {cases.slice(0, 5).map((item) => (
+                {cases.filter(c => c.status !== "Завершено").slice(0, 5).map((item) => (
                   <TableRow key={item.id} className="hover:bg-zinc-50/50 transition-colors">
                     <TableCell className="text-xs font-medium">{item.client}</TableCell>
                     <TableCell>

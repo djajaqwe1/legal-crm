@@ -4,6 +4,19 @@ import { CaseStatusControl } from "@/components/crm/case-status-control";
 import { CrmShell } from "@/components/crm/shell";
 import { CreateCaseForm } from "@/components/crm/create-case-form";
 import { Card, CardContent } from "@/components/ui/card";
+
+function deadlineBadge(deadlineStr: string) {
+  if (deadlineStr === "Без срока") return null;
+  const parts = deadlineStr.match(/^(\d{1,2})\.(\d{1,2})\.(\d{4})$/);
+  if (!parts) return null;
+  const d = new Date(Number(parts[3]), Number(parts[2]) - 1, Number(parts[1]));
+  const diff = Math.ceil((d.getTime() - Date.now()) / 86400000);
+  if (diff < 0) return { label: `Просрочено на ${-diff} дн`, color: "text-red-600" };
+  if (diff === 0) return { label: "Сегодня", color: "text-red-600" };
+  if (diff <= 7) return { label: `Осталось ${diff} дн`, color: "text-orange-600" };
+  if (diff <= 14) return { label: `Осталось ${diff} дн`, color: "text-amber-600" };
+  return null;
+}
 import {
   Table,
   TableBody,
@@ -112,7 +125,9 @@ export default async function CasesPage({ searchParams }: PageProps) {
               {cases.length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={7} className="h-32 text-center text-zinc-500 italic">
-                    Дела ещё не созданы. Нажмите &laquo;Создать новое дело&raquo;, чтобы начать.
+                    {query
+                      ? `По запросу «${q}» ничего не найдено.`
+                      : "Дела ещё не созданы. Нажмите «Создать новое дело», чтобы начать."}
                   </TableCell>
                 </TableRow>
               ) : (
@@ -143,11 +158,16 @@ export default async function CasesPage({ searchParams }: PageProps) {
                       </div>
                     </TableCell>
                     <TableCell className="text-right">
-                      <div className="flex flex-col items-end">
+                      <div className="flex flex-col items-end gap-0.5">
                         <span className="text-sm font-medium text-zinc-900 dark:text-zinc-100">{item.deadline}</span>
-                        {item.deadline !== "Без срока" && (
-                          <span className="text-[10px] text-zinc-500 uppercase">Осталось 5 дней</span>
-                        )}
+                        {(() => {
+                          const badge = deadlineBadge(item.deadline);
+                          return badge ? (
+                            <span className={`text-[10px] font-bold uppercase tracking-wide ${badge.color}`}>
+                              {badge.label}
+                            </span>
+                          ) : null;
+                        })()}
                       </div>
                     </TableCell>
                     <TableCell className="text-right">

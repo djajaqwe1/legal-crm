@@ -137,6 +137,7 @@ export function JarvisChat() {
 
   const sendMessage = useCallback(async (text: string, confirmed?: boolean, action?: typeof pendingAction) => {
     if (!text.trim() && !confirmed) return;
+    if (isLoading) return; // Prevent double-submit
 
     const userMsg: Message = {
       id: Date.now().toString(),
@@ -326,14 +327,17 @@ export function JarvisChat() {
 
               {msg.toolResult && <ResultCard toolName={msg.toolUsed!} data={msg.toolResult} />}
 
-              {msg.needsConfirmation && pendingAction && (
+              {/* Only show confirm buttons for the LATEST pending message, not all old ones */}
+              {msg.needsConfirmation && !msg.confirmed && !msg.denied &&
+               msg.pendingAction && pendingAction &&
+               msg.pendingAction.toolName === pendingAction.toolName && (
                 <div className="flex gap-2 mt-1">
-                  <Button size="sm" onClick={handleConfirm}
+                  <Button size="sm" onClick={handleConfirm} disabled={isLoading}
                     className="h-7 text-xs bg-green-600 hover:bg-green-700 text-white gap-1">
                     <CheckCircle className="h-3.5 w-3.5" />
                     Разрешаю
                   </Button>
-                  <Button size="sm" variant="outline" onClick={handleDeny}
+                  <Button size="sm" variant="outline" onClick={handleDeny} disabled={isLoading}
                     className="h-7 text-xs gap-1 text-red-600 border-red-200 hover:bg-red-50">
                     <XCircle className="h-3.5 w-3.5" />
                     Отмена

@@ -48,7 +48,7 @@ export default async function CaseDetailPage({ params }: PageProps) {
     <CrmShell>
       <header className="space-y-4 mb-8">
         <nav className="flex items-center gap-2 text-xs font-medium text-zinc-500 uppercase tracking-wider">
-          <Link href="/admin" className="hover:text-zinc-900 transition-colors flex items-center gap-1">
+          <Link href="/admin/dashboard" className="hover:text-zinc-900 transition-colors flex items-center gap-1">
             <Home className="h-3 w-3" />
             Дашборд
           </Link>
