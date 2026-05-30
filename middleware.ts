@@ -8,8 +8,8 @@ const PORTAL_COOKIE = "portal_session";
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
-  // Protect /admin routes (except login page itself)
-  if (pathname.startsWith("/admin")) {
+  // Protect /admin routes (page-level only, not API)
+  if (pathname.startsWith("/admin") && !pathname.startsWith("/api")) {
     const session = request.cookies.get(SESSION_COOKIE);
     if (session?.value !== SESSION_VALUE) {
       const loginUrl = new URL("/login", request.url);
