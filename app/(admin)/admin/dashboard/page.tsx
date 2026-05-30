@@ -198,6 +198,40 @@ export default async function Home() {
         </Card>
       </div>
 
+      {/* Status breakdown bar chart */}
+      {cases.length > 0 && (() => {
+        const statuses = [
+          { label: "Новый", color: "bg-zinc-400 dark:bg-zinc-500" },
+          { label: "В работе", color: "bg-blue-500" },
+          { label: "Суд", color: "bg-violet-500" },
+          { label: "Пауза", color: "bg-amber-400" },
+          { label: "Завершено", color: "bg-green-500" },
+        ];
+        const total = cases.length;
+        return (
+          <Card className="border-zinc-200 dark:border-zinc-800 shadow-sm mb-6 overflow-hidden">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-sm font-bold uppercase tracking-wider text-zinc-500">Распределение дел по статусам</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {statuses.map(s => {
+                const count = cases.filter(c => c.status === s.label).length;
+                const pct = total > 0 ? Math.round(count / total * 100) : 0;
+                return (
+                  <div key={s.label} className="flex items-center gap-3">
+                    <span className="text-xs text-zinc-600 dark:text-zinc-400 w-20 shrink-0">{s.label}</span>
+                    <div className="flex-1 h-2 rounded-full bg-zinc-100 dark:bg-zinc-800 overflow-hidden">
+                      <div className={`h-full rounded-full ${s.color} transition-all`} style={{ width: `${pct}%` }} />
+                    </div>
+                    <span className="text-xs font-mono font-bold text-zinc-700 dark:text-zinc-300 w-10 text-right shrink-0">{count}</span>
+                  </div>
+                );
+              })}
+            </CardContent>
+          </Card>
+        );
+      })()}
+
       <div className="grid gap-6 lg:grid-cols-3">
         <Card className="lg:col-span-2 border-zinc-200 bg-white shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
           <CardHeader className="flex flex-row items-center justify-between">

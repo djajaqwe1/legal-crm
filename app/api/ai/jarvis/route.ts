@@ -10,6 +10,19 @@ export const dynamic = "force-dynamic";
 const GEMINI_KEY = process.env.GEMINI_API_KEY ?? "";
 const GEMINI_MODELS = ["gemini-2.0-flash", "gemini-flash-latest", "gemini-pro-latest"];
 
+// Simple in-memory rate limiter: max 30 requests per minute per IP
+const rateLimitMap = new Map<string, { count: number; resetAt: number }>();
+function isRateLimited(ip: string): boolean {
+  const now = Date.now();
+  const entry = rateLimitMap.get(ip);
+  if (!entry || now > entry.resetAt) {
+    rateLimitMap.set(ip, { count: 1, resetAt: now + 60_000 });
+    return false;
+  }
+  entry.count++;
+  return entry.count > 30;
+}
+
 const SYSTEM_PROMPT = `Ты — Джарвис, умный AI-помощник для юридической фирмы ТОО «Конгломерат Алтай».
 Ты помогаешь юристу управлять делами, клиентами и договорами.
 Ты понимаешь голосовые команды на русском языке.
@@ -317,30 +330,51 @@ async function executeToolCall(
     const { type, description, clientName } = args as {
       type: string; description: string; clientName?: string;
     };
-    // Generate document text using Gemini directly
     const docPrompt = `Ты — опытный казахстанский юрист. Составь ${type} на русском языке.
 Ситуация: ${description}
 ${clientName ? `Клиент: ${clientName}` : ""}
 
 Требования:
-- Используй официальный юридический язык
-- Структурируй документ по разделам
+- Используй официальный юридический язык Казахстана
+- Структурируй документ: шапка, основная часть, требования, подпись
 - Укажи все необходимые реквизиты с пометками [ЗАПОЛНИТЬ]
-- Ссылайся на актуальное законодательство РК
-- Документ должен быть готов к использованию
+- Ссылайся на актуальное законодательство РК (ГК РК, ГПК РК и т.д.)
+- Документ должен быть сразу готов к использованию
 
-Выведи только текст документа без пояснений.`;
+Выведи только текст документа без вводных пояснений.`;
 
-    const genAI = new GoogleGenerativeAI(GEMINI_KEY);
-    const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
-    const result = await model.generateContent(docPrompt);
-    const docText = result.response.text();
-
-    return {
-      success: true,
-      data: { type, text: docText, clientName },
-      message: `${type} сгенерирован`,
-    };
+    try {
+      const genAI = new GoogleGenerativeAI(GEMINI_KEY);
+      // Try models in order until one works
+      let docText = "";
+      for (const modelName of GEMINI_MODELS) {
+        try {
+          const model = genAI.getGenerativeModel({ model: modelName });
+          const result = await Promise.race([
+            model.generateContent(docPrompt),
+            new Promise<never>((_, reject) => setTimeout(() => reject(new Error("timeout")), 25000)),
+          ]);
+          docText = (result as Awaited<ReturnType<typeof model.generateContent>>).response.text();
+          if (docText) break;
+        } catch {
+          continue;
+        }
+      }
+      if (!docText) {
+        return { success: false, message: "Не удалось сгенерировать документ (превышен лимит или ошибка AI). Попробуйте через минуту." };
+      }
+      return {
+        success: true,
+        data: { type, text: docText, clientName },
+        message: `${type} сгенерирован`,
+      };
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "";
+      if (msg.includes("429") || msg.includes("RESOURCE_EXHAUSTED")) {
+        return { success: false, message: "Превышен лимит AI. Подождите 1-2 минуты." };
+      }
+      return { success: false, message: "Ошибка генерации документа. Попробуйте позже." };
+    }
   }
 
   return { success: false, message: `Инструмент "${toolName}" не найден` };
@@ -375,6 +409,12 @@ async function callGeminiWithFallback(
 export async function POST(req: Request) {
   if (!GEMINI_KEY) {
     return NextResponse.json({ error: "GEMINI_API_KEY не настроен на сервере" }, { status: 503 });
+  }
+
+  // Rate limit by IP
+  const ip = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? "unknown";
+  if (isRateLimited(ip)) {
+    return NextResponse.json({ error: "Слишком много запросов. Подождите минуту." }, { status: 429 });
   }
 
   try {
