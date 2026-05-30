@@ -405,6 +405,9 @@ export async function POST(req: Request) {
     if (confirmed && pendingAction) {
       const result = await executeToolCall(wid, pendingAction.toolName, pendingAction.args ?? {});
       if (!result.success) {
+        void prisma.chatMessage.create({
+          data: { workspaceId: wid, role: "assistant", content: `[TOOL_FAILED: ${pendingAction.toolName}] ${result.message}` },
+        }).catch(() => {});
         return NextResponse.json({ reply: `Не удалось выполнить: ${result.message}`, needsConfirmation: false });
       }
       return NextResponse.json({
@@ -484,6 +487,23 @@ export async function POST(req: Request) {
     } catch {
       replyText = "Не удалось получить ответ. Попробуйте ещё раз.";
     }
+
+    // Save chat to DB (fire-and-forget, doesn't block response)
+    void (async () => {
+      try {
+        const lastUserMsg = messages[messages.length - 1];
+        if (lastUserMsg?.role === "user") {
+          await prisma.chatMessage.createMany({
+            data: [
+              { workspaceId: wid, role: "user", content: lastUserMsg.content },
+              { workspaceId: wid, role: "assistant", content: replyText },
+            ],
+          });
+        }
+      } catch {
+        // Silently ignore DB save errors
+      }
+    })();
 
     return NextResponse.json({
       reply: replyText,

@@ -141,17 +141,32 @@ export default async function CaseDetailPage({ params }: PageProps) {
           </Card>
 
           {/* Задачи по делу */}
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between">
-              <CardTitle className="flex items-center gap-2">
-                <CheckCircle2 className="h-5 w-5 text-zinc-500" />
-                Задачи
-              </CardTitle>
+          <Card className="dark:border-zinc-800">
+            <CardHeader className="flex flex-row items-center justify-between pb-3">
+              <div className="flex items-center gap-3">
+                <CardTitle className="flex items-center gap-2 text-base">
+                  <CheckCircle2 className="h-4 w-4 text-zinc-500" />
+                  Задачи
+                </CardTitle>
+                {caseData.tasks.length > 0 && (
+                  <span className="text-xs text-zinc-500">
+                    {caseData.tasks.filter(t => t.completed).length}/{caseData.tasks.length} выполнено
+                  </span>
+                )}
+              </div>
               <AddTaskDialog caseId={id} />
             </CardHeader>
+            {caseData.tasks.length > 0 && (
+              <div className="mx-6 mb-4 h-1.5 rounded-full bg-zinc-100 dark:bg-zinc-800 overflow-hidden">
+                <div
+                  className="h-full rounded-full bg-green-500 transition-all"
+                  style={{ width: `${Math.round(caseData.tasks.filter(t => t.completed).length / caseData.tasks.length * 100)}%` }}
+                />
+              </div>
+            )}
             <CardContent>
               {caseData.tasks.length > 0 ? (
-                <div className="space-y-3">
+                <div className="space-y-2">
                   {caseData.tasks.map((task) => (
                     <TaskItem key={task.id} task={task} />
                   ))}
@@ -199,19 +214,23 @@ export default async function CaseDetailPage({ params }: PageProps) {
             </CardHeader>
             <CardContent>
               {caseData.contracts.length > 0 ? (
-                <ul className="space-y-3">
+                <ul className="space-y-2">
                   {caseData.contracts.map((contract) => (
-                    <li key={contract.id} className="rounded-lg border border-zinc-100 p-3">
-                      <p className="text-xs font-bold">{contract.number}</p>
-                      <p className="text-[10px] text-zinc-500">{contract.type}</p>
-                      <Badge variant="outline" className="mt-2 text-[8px] h-4">
-                        {contract.status}
-                      </Badge>
+                    <li key={contract.id} className="rounded-lg border border-zinc-100 dark:border-zinc-800 p-3 hover:bg-zinc-50 dark:hover:bg-zinc-800/50 transition-colors">
+                      <div className="flex items-start justify-between gap-2">
+                        <div>
+                          <p className="text-sm font-mono font-bold text-zinc-900 dark:text-zinc-100">{contract.number}</p>
+                          <p className="text-xs text-zinc-500 mt-0.5">{contract.type}</p>
+                        </div>
+                        <Badge variant="outline" className="text-[10px] shrink-0">
+                          {contract.status}
+                        </Badge>
+                      </div>
                     </li>
                   ))}
                 </ul>
               ) : (
-                <p className="text-sm text-zinc-500 italic text-center py-4">Договоры не найдены</p>
+                <p className="text-sm text-zinc-500 italic text-center py-4">Договоры не привязаны. Создайте или свяжите через реестр договоров.</p>
               )}
             </CardContent>
           </Card>
