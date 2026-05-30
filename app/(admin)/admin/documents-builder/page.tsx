@@ -5,8 +5,9 @@ import { useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { CrmShell } from "@/components/crm/shell";
-import { History, Loader2, Clock, ChevronRight, Home, Wand2 } from "lucide-react";
+import { History, Loader2, Clock, ChevronRight, Home, Wand2, FileText, Eye, EyeOff, Download } from "lucide-react";
 import Link from "next/link";
+import { DOC_TEMPLATES } from "@/lib/doc-templates";
 
 type DocBuilderHistoryItem = {
   role: string;
@@ -67,6 +68,9 @@ function DocumentsBuilderContent() {
   const [isHistoryLoading, setIsHistoryLoading] = useState(true);
   const [isDownloading, setIsDownloading] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [showTemplate, setShowTemplate] = useState(false);
+
+  const currentTemplate = DOC_TEMPLATES[type];
 
   const loadHistory = useCallback(async () => {
     try {
@@ -191,7 +195,7 @@ function DocumentsBuilderContent() {
     <CrmShell>
       <header className="space-y-4 mb-8">
         <nav className="flex items-center gap-2 text-xs font-medium text-zinc-500 uppercase tracking-wider">
-          <Link href="/admin" className="hover:text-zinc-900 transition-colors flex items-center gap-1">
+          <Link href="/admin/dashboard" className="hover:text-zinc-900 transition-colors flex items-center gap-1">
             <Home className="h-3 w-3" />
             Дашборд
           </Link>
@@ -204,7 +208,9 @@ function DocumentsBuilderContent() {
 
         <div className="flex flex-col gap-1">
           <h2 className="text-3xl font-bold tracking-tight text-zinc-900 dark:text-zinc-100">Конструктор документов</h2>
-          <p className="text-sm text-zinc-500">Автоматическая генерация исков, договоров и претензий по праву РК</p>
+          <p className="text-sm text-zinc-500">
+            Генерация по образцам — AI следует структуре реальных казахстанских документов
+          </p>
         </div>
       </header>
 
@@ -246,10 +252,22 @@ function DocumentsBuilderContent() {
                 </div>
 
                 <div className="space-y-2">
-                  <label className="text-sm font-medium">Тип документа</label>
+                  <div className="flex items-center justify-between">
+                    <label className="text-sm font-medium">Тип документа</label>
+                    {currentTemplate && (
+                      <button
+                        type="button"
+                        onClick={() => setShowTemplate(!showTemplate)}
+                        className="flex items-center gap-1 text-xs text-blue-600 hover:text-blue-800 dark:text-blue-400 transition-colors"
+                      >
+                        {showTemplate ? <EyeOff className="h-3 w-3" /> : <Eye className="h-3 w-3" />}
+                        {showTemplate ? "Скрыть образец" : "Посмотреть образец"}
+                      </button>
+                    )}
+                  </div>
                   <select
                     value={type}
-                    onChange={(e) => setType(e.target.value)}
+                    onChange={(e) => { setType(e.target.value); setShowTemplate(false); }}
                     className="w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
                   >
                     {DOCUMENT_TYPES.map((t) => (
@@ -258,6 +276,23 @@ function DocumentsBuilderContent() {
                       </option>
                     ))}
                   </select>
+                  {currentTemplate && (
+                    <div className="flex items-center gap-1.5 rounded-md bg-blue-50 dark:bg-blue-900/20 px-3 py-1.5 text-xs text-blue-700 dark:text-blue-300">
+                      <FileText className="h-3 w-3 shrink-0" />
+                      AI работает по образцу: <strong>{currentTemplate.label}</strong> · структура документа РК
+                    </div>
+                  )}
+                  {showTemplate && currentTemplate && (
+                    <div className="rounded-md border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-800/50 overflow-hidden">
+                      <div className="flex items-center justify-between px-3 py-2 bg-zinc-100 dark:bg-zinc-800 border-b border-zinc-200 dark:border-zinc-700">
+                        <span className="text-[10px] font-bold uppercase tracking-wider text-zinc-500">Образец структуры (AI следует этому формату)</span>
+                        <button onClick={() => setShowTemplate(false)} className="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 text-xs">×</button>
+                      </div>
+                      <pre className="p-3 text-[10px] text-zinc-600 dark:text-zinc-300 whitespace-pre-wrap leading-relaxed max-h-56 overflow-y-auto font-sans">
+                        {currentTemplate.example}
+                      </pre>
+                    </div>
+                  )}
                 </div>
 
                 <div className="space-y-2">
@@ -284,14 +319,33 @@ function DocumentsBuilderContent() {
               <CardHeader className="flex flex-row items-center justify-between">
                 <CardTitle>Результат</CardTitle>
                 {result && (
-                  <div className="flex gap-2">
+                  <div className="flex flex-wrap gap-2">
                     <Button
                       variant="outline"
                       size="sm"
                       onClick={handleDownloadPdf}
                       disabled={isDownloading}
+                      className="gap-1"
                     >
-                      {isDownloading ? "..." : "Скачать PDF"}
+                      <Download className="h-3 w-3" />
+                      {isDownloading ? "..." : "PDF"}
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="gap-1"
+                      onClick={() => {
+                        const blob = new Blob([result], { type: "text/plain;charset=utf-8" });
+                        const url = URL.createObjectURL(blob);
+                        const a = document.createElement("a");
+                        a.href = url;
+                        a.download = `${DOCUMENT_TYPES.find(t => t.id === type)?.label ?? "документ"}.txt`;
+                        a.click();
+                        URL.revokeObjectURL(url);
+                      }}
+                    >
+                      <Download className="h-3 w-3" />
+                      TXT
                     </Button>
                     <Button
                       variant="outline"

@@ -3,6 +3,7 @@ import { generateWithFallback } from "@/lib/ai-service";
 import { prisma } from "@/lib/prisma";
 import { resolveWorkspaceId } from "@/lib/workspace-scope";
 import { isDatabaseReachable } from "@/lib/db-health";
+import { buildDocSystemPrompt } from "@/lib/doc-templates";
 
 export async function GET() {
   try {
@@ -22,13 +23,8 @@ export async function GET() {
   }
 }
 
-function docBuilderSystemPrompt(type: string) {
-  return `You are a professional lawyer from Kazakhstan. 
-      Your task: create a legally correct document (${type}) based on the provided data.
-      Use the laws of the Republic of Kazakhstan (Civil Code, Civil Procedure Code, etc.).
-      The document must be structured, with an official tone.
-      Return ONLY the text of the document in Markdown format.
-      The output MUST be in Russian language.`;
+function docBuilderSystemPrompt(type: string): string {
+  return buildDocSystemPrompt(type);
 }
 
 export async function POST(request: Request) {
