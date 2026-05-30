@@ -25,19 +25,23 @@ type Message = {
 const TOOL_LABELS: Record<string, string> = {
   create_case: "Создать дело",
   create_client: "Создать клиента",
+  create_contract: "Создать договор",
   update_case: "Обновить дело",
   get_cases: "Поиск дел",
   get_clients: "Поиск клиентов",
   get_stats: "Статистика",
+  generate_document: "Генерация документа",
 };
 
 const TOOL_COLORS: Record<string, string> = {
   create_case: "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300",
   create_client: "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300",
+  create_contract: "bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-300",
   update_case: "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300",
   get_cases: "bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300",
   get_clients: "bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300",
   get_stats: "bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300",
+  generate_document: "bg-teal-100 text-teal-700 dark:bg-teal-900/30 dark:text-teal-300",
 };
 
 function ResultCard({ toolName, data }: { toolName: string; data: ToolResult }) {
@@ -112,6 +116,47 @@ function ResultCard({ toolName, data }: { toolName: string; data: ToolResult }) 
     );
   }
 
+  if (toolName === "create_contract" && data && typeof data === "object") {
+    const d = data as { id: string; number: string };
+    return (
+      <Link href="/admin/contracts"
+        className="mt-2 flex items-center gap-2 rounded-lg border border-violet-200 dark:border-violet-800 bg-violet-50 dark:bg-violet-900/20 px-3 py-2 text-xs font-medium text-violet-800 dark:text-violet-300 hover:opacity-80 transition-opacity">
+        <CheckCircle className="h-3.5 w-3.5 shrink-0" />
+        Договор {d.number} создан — перейти к реестру
+      </Link>
+    );
+  }
+
+  if (toolName === "generate_document" && data && typeof data === "object") {
+    const d = data as { type: string; text: string };
+    return (
+      <div className="mt-2 rounded-lg border border-teal-200 dark:border-teal-800 bg-teal-50 dark:bg-teal-900/10 overflow-hidden">
+        <div className="flex items-center justify-between px-3 py-2 bg-teal-100 dark:bg-teal-900/30">
+          <span className="text-xs font-bold text-teal-800 dark:text-teal-300 uppercase tracking-wider">
+            {d.type}
+          </span>
+          <button
+            onClick={() => {
+              const blob = new Blob([d.text], { type: "text/plain;charset=utf-8" });
+              const url = URL.createObjectURL(blob);
+              const a = document.createElement("a");
+              a.href = url;
+              a.download = `${d.type}.txt`;
+              a.click();
+              URL.revokeObjectURL(url);
+            }}
+            className="text-[10px] font-bold text-teal-700 dark:text-teal-300 hover:underline uppercase tracking-wider"
+          >
+            Скачать
+          </button>
+        </div>
+        <pre className="p-3 text-[11px] text-teal-900 dark:text-teal-100 whitespace-pre-wrap leading-relaxed max-h-64 overflow-y-auto font-sans">
+          {d.text}
+        </pre>
+      </div>
+    );
+  }
+
   return null;
 }
 
@@ -120,7 +165,7 @@ export function JarvisChat() {
     {
       id: "welcome",
       role: "assistant",
-      content: "Привет! Я Джарвис — ваш AI-помощник. Я могу создавать дела и клиентов, показывать статистику, искать информацию. Говорите голосом или пишите — я помогу.",
+      content: "Привет! Я Джарвис — ваш AI-помощник юриста. Могу создавать дела, клиентов и договоры, генерировать документы (иски, жалобы, заявления), искать информацию в базе. Говорите голосом или пишите — я помогу.",
     },
   ]);
   const [input, setInput] = useState("");
@@ -279,8 +324,9 @@ export function JarvisChat() {
   const quickCommands = [
     "Покажи статистику",
     "Последние 5 дел",
-    "Список клиентов",
     "Дела в суде",
+    "Составь исковое заявление о взыскании долга",
+    "Создать договор №001-2026",
   ];
 
   return (

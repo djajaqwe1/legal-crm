@@ -3,7 +3,7 @@ import { GoogleGenerativeAI, SchemaType, type FunctionDeclaration } from "@googl
 import { prisma } from "@/lib/prisma";
 import { resolveWorkspaceId } from "@/lib/workspace-scope";
 import { ruToCaseStatus, caseStatusToRu } from "@/lib/case-status";
-import { CaseStatus } from "@/lib/generated-client";
+import { CaseStatus, ContractStatus } from "@/lib/generated-client";
 
 export const dynamic = "force-dynamic";
 
@@ -88,6 +88,33 @@ const tools = [
     name: "get_stats",
     description: "Получить общую статистику по системе: количество дел, клиентов, договоров, просроченных дел.",
     parameters: { type: SchemaType.OBJECT, properties: {} },
+  },
+  {
+    name: "create_contract",
+    description: "Создать договор для клиента. Вызывай только после подтверждения.",
+    parameters: {
+      type: SchemaType.OBJECT,
+      properties: {
+        number: { type: SchemaType.STRING, description: "Номер договора, например №001-2026" },
+        counterparty: { type: SchemaType.STRING, description: "Название контрагента/клиента" },
+        type: { type: SchemaType.STRING, description: "Тип договора" },
+        clientName: { type: SchemaType.STRING, description: "Имя клиента для привязки (опционально)" },
+      },
+      required: ["number", "counterparty"],
+    },
+  },
+  {
+    name: "generate_document",
+    description: "Сгенерировать юридический документ (иск, жалоба, заявление, ходатайство) на основе описания. Не требует подтверждения.",
+    parameters: {
+      type: SchemaType.OBJECT,
+      properties: {
+        type: { type: SchemaType.STRING, description: "Тип документа: иск | жалоба | заявление | ходатайство | претензия" },
+        description: { type: SchemaType.STRING, description: "Описание ситуации и что нужно написать" },
+        clientName: { type: SchemaType.STRING, description: "Имя клиента (опционально)" },
+      },
+      required: ["type", "description"],
+    },
   },
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 ] as any as FunctionDeclaration[];
@@ -251,6 +278,71 @@ async function executeToolCall(
     return { success: true, data: { id: caseId }, message: `Дело обновлено: ${field} → "${value}"` };
   }
 
+  if (toolName === "create_contract") {
+    const { number, counterparty, type = "Оказание юридических услуг", clientName } = args as {
+      number: string; counterparty: string; type?: string; clientName?: string;
+    };
+    let clientId: string | null = null;
+    if (clientName) {
+      const client = await prisma.client.findFirst({
+        where: { workspaceId: wid, name: { contains: clientName, mode: "insensitive" } },
+      });
+      if (client) clientId = client.id;
+    }
+    // Check for duplicate number in workspace
+    const existing = await prisma.contract.findFirst({
+      where: { workspaceId: wid, number },
+    });
+    if (existing) {
+      return { success: false, message: `Договор с номером "${number}" уже существует` };
+    }
+    const contract = await prisma.contract.create({
+      data: {
+        workspaceId: wid,
+        number,
+        counterparty,
+        type,
+        clientId,
+        status: ContractStatus.DRAFT,
+      },
+    });
+    return {
+      success: true,
+      data: { id: contract.id, number: contract.number },
+      message: `Договор "${number}" с контрагентом "${counterparty}" создан`,
+    };
+  }
+
+  if (toolName === "generate_document") {
+    const { type, description, clientName } = args as {
+      type: string; description: string; clientName?: string;
+    };
+    // Generate document text using Gemini directly
+    const docPrompt = `Ты — опытный казахстанский юрист. Составь ${type} на русском языке.
+Ситуация: ${description}
+${clientName ? `Клиент: ${clientName}` : ""}
+
+Требования:
+- Используй официальный юридический язык
+- Структурируй документ по разделам
+- Укажи все необходимые реквизиты с пометками [ЗАПОЛНИТЬ]
+- Ссылайся на актуальное законодательство РК
+- Документ должен быть готов к использованию
+
+Выведи только текст документа без пояснений.`;
+
+    const genAI = new GoogleGenerativeAI(GEMINI_KEY);
+    const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
+    const result = await model.generateContent(docPrompt);
+    const docText = result.response.text();
+
+    return {
+      success: true,
+      data: { type, text: docText, clientName },
+      message: `${type} сгенерирован`,
+    };
+  }
+
   return { success: false, message: `Инструмент "${toolName}" не найден` };
 }
 
@@ -346,8 +438,8 @@ export async function POST(req: Request) {
       const toolName = call.name;
       const args = (call.args ?? {}) as Record<string, unknown>;
 
-      // Read-only tools execute immediately without confirmation
-      if (toolName === "get_cases" || toolName === "get_clients" || toolName === "get_stats") {
+      // Read-only or generative tools execute immediately without confirmation
+      if (toolName === "get_cases" || toolName === "get_clients" || toolName === "get_stats" || toolName === "generate_document") {
         const toolResult = await executeToolCall(wid, toolName, args);
         let followUpText = toolResult.message;
         try {

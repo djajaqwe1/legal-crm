@@ -46,7 +46,7 @@ export default async function ClientDetailPage({ params }: PageProps) {
   });
 
   return (
-    <CrmShell>
+    <CrmShell pageContext={`Детали клиента: ${client.name}. Телефон: ${client.phone ?? "не указан"}. Дел: ${client.cases?.length ?? 0}.`}>
       <header className="space-y-4 mb-8">
         <nav className="flex flex-wrap items-center gap-2 text-xs font-medium text-zinc-500 uppercase tracking-wider">
           <Link

@@ -33,27 +33,31 @@ import { Button } from "@/components/ui/button";
 import { VoiceCreateButton } from "@/components/crm/voice-create-button";
 
 type PageProps = {
-  searchParams: Promise<{ q?: string }>;
+  searchParams: Promise<{ q?: string; status?: string }>;
 };
 
+const STATUS_OPTIONS = ["Новый", "В работе", "Суд", "Пауза", "Завершено"];
+
 export default async function CasesPage({ searchParams }: PageProps) {
-  const { q } = await searchParams;
+  const { q, status: statusFilter } = await searchParams;
   const query = (q ?? "").trim().toLowerCase();
 
   const [allCases, clients] = await Promise.all([getCases(), getClients()]);
 
-  const cases = query
-    ? allCases.filter(
-        (item) =>
-          item.caseTitle.toLowerCase().includes(query) ||
-          item.client.toLowerCase().includes(query) ||
-          item.code.toLowerCase().includes(query) ||
-          (item.objectLabel ?? "").toLowerCase().includes(query),
-      )
-    : allCases;
+  const cases = allCases.filter(item => {
+    const matchesQuery = !query ||
+      item.caseTitle.toLowerCase().includes(query) ||
+      item.client.toLowerCase().includes(query) ||
+      item.code.toLowerCase().includes(query) ||
+      (item.objectLabel ?? "").toLowerCase().includes(query);
+    const matchesStatus = !statusFilter || item.status === statusFilter;
+    return matchesQuery && matchesStatus;
+  });
+
+  const hasFilter = !!query || !!statusFilter;
 
   return (
-    <CrmShell>
+    <CrmShell pageContext={`Реестр дел. Всего дел: ${allCases.length}, активных: ${allCases.filter(c => c.status !== "Завершено").length}.`}>
       <header className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div className="space-y-1">
           <p className="text-sm font-medium text-zinc-500 uppercase tracking-wider">MVP / Контроль дел</p>
@@ -81,29 +85,38 @@ export default async function CasesPage({ searchParams }: PageProps) {
             aria-label="Поиск по реестру дел"
           />
         </div>
-        <div className="flex shrink-0 gap-2">
+        <div className="flex shrink-0 flex-wrap gap-2">
+          <select
+            name="status"
+            defaultValue={statusFilter ?? ""}
+            className="rounded-md border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-950 px-2.5 py-1.5 text-sm text-zinc-700 dark:text-zinc-300 focus:outline-none focus:ring-2 focus:ring-zinc-900"
+          >
+            <option value="">Все статусы</option>
+            {STATUS_OPTIONS.map(s => (
+              <option key={s} value={s}>{s}</option>
+            ))}
+          </select>
           <Button type="submit" variant="secondary" className="gap-2 bg-white dark:bg-zinc-900">
             <Search className="h-4 w-4" />
             Найти
           </Button>
-          {query ? (
+          {hasFilter ? (
             <Link
               href="/admin/cases"
-              className="inline-flex h-8 shrink-0 items-center rounded-lg border border-zinc-200 bg-white px-3 text-sm font-medium text-zinc-700 hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-300 dark:hover:bg-zinc-800"
+              className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-lg border border-zinc-200 bg-white px-3 text-sm font-medium text-zinc-700 hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-300 dark:hover:bg-zinc-800"
             >
+              <FilterIcon className="h-3.5 w-3.5" />
               Сбросить
             </Link>
           ) : null}
-          <Button type="button" variant="outline" className="bg-white gap-2 dark:bg-zinc-900">
-            <FilterIcon className="h-4 w-4" />
-            Фильтры
-          </Button>
         </div>
       </form>
 
-      {query && (
+      {hasFilter && (
         <p className="text-sm text-zinc-500">
-          По запросу «{q}» найдено дел: <strong>{cases.length}</strong>
+          Найдено дел: <strong className="text-zinc-900 dark:text-zinc-100">{cases.length}</strong>
+          {statusFilter && <> · статус: <strong>{statusFilter}</strong></>}
+          {query && <> · запрос: «{q}»</>}
         </p>
       )}
 

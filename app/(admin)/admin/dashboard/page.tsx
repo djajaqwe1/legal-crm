@@ -120,7 +120,7 @@ export default async function Home() {
   const upcomingDeadlines = stats.upcomingCases.length + stats.overdueCases.length;
 
   return (
-    <CrmShell>
+    <CrmShell pageContext={`Дашборд. Активных дел: ${activeCases.length}, клиентов: ${clients.length}, договоров: ${contracts.length}, срочных дедлайнов: ${upcomingDeadlines}.`}>
       <header className="space-y-1 mb-8">
         <p className="text-sm font-medium text-zinc-500 uppercase tracking-wider">Система автоматизации ТОО «Конгломерат Алтай»</p>
         <h2 className="text-3xl font-bold tracking-tight text-zinc-900 dark:text-zinc-100">Панель управления</h2>

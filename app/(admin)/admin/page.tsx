@@ -15,7 +15,7 @@ export default function JarvisPage() {
             <div>
               <h1 className="text-2xl font-bold tracking-tight">Джарвис</h1>
               <p className="text-sm text-zinc-500 dark:text-zinc-400">
-                AI-помощник · голосовое управление · автоматизация
+                AI-помощник · дела, клиенты, договоры · генерация документов · голосовое управление
               </p>
             </div>
           </div>

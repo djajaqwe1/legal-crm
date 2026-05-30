@@ -37,7 +37,7 @@ export default async function ClientsPage({ searchParams }: PageProps) {
     : allClients;
 
   return (
-    <CrmShell>
+    <CrmShell pageContext={`Клиентская база. Всего клиентов: ${allClients.length}.`}>
       <header className="space-y-4 mb-8">
         <nav className="flex items-center gap-2 text-xs font-medium text-zinc-500 uppercase tracking-wider">
           <Link href="/admin/dashboard" className="hover:text-zinc-900 transition-colors flex items-center gap-1">
