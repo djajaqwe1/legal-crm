@@ -154,7 +154,10 @@ export function JarvisChat() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          messages: history.map(m => ({ role: m.role, content: m.content })),
+          // Filter out the initial welcome message (id="welcome") before sending to API
+          messages: history
+            .filter(m => m.id !== "welcome")
+            .map(m => ({ role: m.role, content: m.content })),
           confirmed,
           pendingAction: action ?? undefined,
         }),

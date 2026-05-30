@@ -237,13 +237,21 @@ export async function POST(req: Request) {
       tools: [{ functionDeclarations: tools }],
     });
 
-    const history = messages.slice(0, -1).map(m => ({
+    // Gemini requires history to start with a 'user' message — drop leading model/assistant messages
+    const rawHistory = messages.slice(0, -1).map(m => ({
       role: m.role === "user" ? "user" as const : "model" as const,
       parts: [{ text: m.content }],
     }));
+    const firstUserIdx = rawHistory.findIndex(m => m.role === "user");
+    const history = firstUserIdx >= 0 ? rawHistory.slice(firstUserIdx) : [];
 
     const chat = model.startChat({ history });
-    const lastMessage = messages[messages.length - 1]?.content ?? "";
+    const lastMsg = messages[messages.length - 1];
+    // Only send if last message is from user
+    if (!lastMsg || lastMsg.role !== "user") {
+      return NextResponse.json({ error: "Нет сообщения от пользователя" }, { status: 400 });
+    }
+    const lastMessage = lastMsg.content ?? "";
     const result = await chat.sendMessage(lastMessage);
     const response = result.response;
 

@@ -52,7 +52,10 @@ export function PageAssistantPanel({ pageContext }: Props) {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          messages: history.map(m => ({ role: m.role, content: m.content })),
+          // Filter out initial greeting (id="init") — Gemini requires history to start with user
+          messages: history
+            .filter(m => m.id !== "init")
+            .map(m => ({ role: m.role, content: m.content })),
         }),
       });
       const data = await res.json() as { reply?: string; error?: string };
