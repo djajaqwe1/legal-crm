@@ -126,6 +126,25 @@ export default async function Home() {
         <h2 className="text-3xl font-bold tracking-tight text-zinc-900 dark:text-zinc-100">Панель управления</h2>
       </header>
 
+      {/* Quick Actions */}
+      <div className="flex flex-wrap gap-2 mb-6">
+        <Link href="/admin" className="inline-flex items-center gap-1.5 rounded-full bg-gradient-to-r from-blue-500 to-violet-600 px-4 py-2 text-xs font-bold text-white shadow-md hover:opacity-90 transition-opacity">
+          ✦ Открыть Джарвис
+        </Link>
+        <Link href="/admin/cases?status=В работе" className="inline-flex items-center gap-1.5 rounded-full border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-4 py-2 text-xs font-medium text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors">
+          ⚡ Дела в работе
+        </Link>
+        <Link href="/admin/cases?status=Суд" className="inline-flex items-center gap-1.5 rounded-full border border-violet-200 dark:border-violet-800 bg-violet-50 dark:bg-violet-900/20 px-4 py-2 text-xs font-medium text-violet-700 dark:text-violet-300 hover:bg-violet-100 transition-colors">
+          ⚖️ Дела в суде
+        </Link>
+        <Link href="/admin/contracts?status=EXPIRING" className="inline-flex items-center gap-1.5 rounded-full border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-900/20 px-4 py-2 text-xs font-medium text-amber-700 dark:text-amber-300 hover:bg-amber-100 transition-colors">
+          ⚠ Договоры истекают
+        </Link>
+        <Link href="/admin/clients" className="inline-flex items-center gap-1.5 rounded-full border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-4 py-2 text-xs font-medium text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors">
+          👥 Все клиенты
+        </Link>
+      </div>
+
       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4 mb-8">
         <Card className="border-zinc-200 shadow-sm hover:shadow-md transition-shadow">
           <CardContent className="pt-6">
