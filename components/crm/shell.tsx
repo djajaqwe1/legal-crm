@@ -1,10 +1,13 @@
 import { CrmSidebar } from "@/components/crm/sidebar";
+import { PageAssistantPanel } from "@/components/crm/page-assistant-panel";
 
 type CrmShellProps = {
   children: React.ReactNode;
+  pageContext?: string;
+  hideAssistant?: boolean;
 };
 
-export function CrmShell({ children }: CrmShellProps) {
+export function CrmShell({ children, pageContext, hideAssistant }: CrmShellProps) {
   return (
     <div className="min-h-screen bg-zinc-50 text-zinc-950 dark:bg-zinc-950 dark:text-zinc-100">
       <div className="flex min-h-screen">
@@ -17,6 +20,7 @@ export function CrmShell({ children }: CrmShellProps) {
           </div>
         </main>
       </div>
+      {!hideAssistant && <PageAssistantPanel pageContext={pageContext} />}
     </div>
   );
 }

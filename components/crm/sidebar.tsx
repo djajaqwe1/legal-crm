@@ -14,10 +14,13 @@ import {
   BookOpen,
   LogOut,
   ExternalLink,
+  Bot,
 } from "lucide-react";
+import { ThemeToggle } from "@/components/crm/theme-toggle";
 
 const navItems = [
-  { label: "Дашборд", href: "/admin", icon: LayoutDashboard },
+  { label: "Джарвис ИИ", href: "/admin", icon: Bot },
+  { label: "Дашборд", href: "/admin/dashboard", icon: LayoutDashboard },
   { label: "Клиенты", href: "/admin/clients", icon: Users },
   { label: "Реестр дел", href: "/admin/cases", icon: Briefcase },
   { label: "Договоры", href: "/admin/contracts", icon: FileText },
@@ -69,18 +72,32 @@ export function CrmSidebar() {
             <nav className="mt-4 space-y-1">
               {navItems.map((item) => {
                 const isActive = pathname === item.href || (item.href !== "/admin" && pathname.startsWith(item.href));
+                const isJarvis = item.href === "/admin";
                 return (
                   <Link
                     key={item.href}
                     href={item.href}
                     className={`flex items-center gap-3 w-full rounded-lg px-3 py-2.5 text-sm font-medium transition-all ${
-                      isActive
-                        ? "bg-zinc-900 text-white shadow-md shadow-zinc-200 dark:bg-zinc-100 dark:text-zinc-900 dark:shadow-none"
-                        : "text-zinc-500 hover:bg-zinc-100 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-900 dark:hover:text-zinc-100"
+                      isJarvis
+                        ? isActive
+                          ? "bg-gradient-to-r from-blue-600 to-violet-600 text-white shadow-md shadow-blue-200 dark:shadow-blue-900/30"
+                          : "text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-950/30"
+                        : isActive
+                          ? "bg-zinc-900 text-white shadow-md shadow-zinc-200 dark:bg-zinc-100 dark:text-zinc-900 dark:shadow-none"
+                          : "text-zinc-500 hover:bg-zinc-100 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-900 dark:hover:text-zinc-100"
                     }`}
                   >
-                    <item.icon className={`h-4 w-4 ${isActive ? "text-white dark:text-zinc-900" : "text-zinc-400"}`} />
+                    <item.icon className={`h-4 w-4 ${
+                      isJarvis
+                        ? isActive ? "text-white" : "text-blue-500 dark:text-blue-400"
+                        : isActive ? "text-white dark:text-zinc-900" : "text-zinc-400"
+                    }`} />
                     {item.label}
+                    {isJarvis && !isActive && (
+                      <span className="ml-auto text-[9px] font-bold uppercase tracking-widest rounded-full bg-blue-100 dark:bg-blue-900/40 text-blue-600 dark:text-blue-400 px-1.5 py-0.5">
+                        AI
+                      </span>
+                    )}
                   </Link>
                 );
               })}
@@ -137,6 +154,8 @@ export function CrmSidebar() {
           <ExternalLink className="h-4 w-4" />
           Кабинет клиента
         </Link>
+
+        <ThemeToggle />
 
         <button
           onClick={handleLogout}
