@@ -8,7 +8,13 @@ import { CaseStatus, ContractStatus } from "@/lib/generated-client";
 export const dynamic = "force-dynamic";
 
 const GEMINI_KEY = process.env.GEMINI_API_KEY ?? "";
-const GEMINI_MODELS = ["gemini-2.0-flash", "gemini-flash-latest", "gemini-pro-latest"];
+// Each model has its OWN quota bucket on free tier — fallback to next on 429 too
+const GEMINI_MODELS = [
+  "gemini-2.0-flash",
+  "gemini-2.0-flash-lite",
+  "gemini-1.5-flash",
+  "gemini-1.5-flash-8b",
+];
 
 // Simple in-memory rate limiter: max 30 requests per minute per IP
 const rateLimitMap = new Map<string, { count: number; resetAt: number }>();
@@ -345,7 +351,7 @@ ${clientName ? `Клиент: ${clientName}` : ""}
 
     try {
       const genAI = new GoogleGenerativeAI(GEMINI_KEY);
-      // Try models in order until one works
+      // Try models in order, pause briefly on quota errors
       let docText = "";
       for (const modelName of GEMINI_MODELS) {
         try {
@@ -356,7 +362,11 @@ ${clientName ? `Клиент: ${clientName}` : ""}
           ]);
           docText = (result as Awaited<ReturnType<typeof model.generateContent>>).response.text();
           if (docText) break;
-        } catch {
+        } catch (e) {
+          const errMsg = e instanceof Error ? e.message : String(e);
+          if (errMsg.includes("429") || errMsg.includes("RESOURCE_EXHAUSTED")) {
+            await new Promise(r => setTimeout(r, 1500));
+          }
           continue;
         }
       }
@@ -385,6 +395,9 @@ async function callGeminiWithFallback(
   history: Array<{ role: "user" | "model"; parts: Array<{ text: string }> }>,
   lastMessage: string,
 ) {
+  // Limit history to last 8 messages to reduce token usage
+  const trimmedHistory = history.slice(-8);
+
   let lastError: Error | null = null;
   for (const modelName of GEMINI_MODELS) {
     try {
@@ -394,13 +407,21 @@ async function callGeminiWithFallback(
         systemInstruction,
         tools: [{ functionDeclarations: tools }],
       });
-      const chat = model.startChat({ history });
+      const chat = model.startChat({ history: trimmedHistory });
       const result = await chat.sendMessage(lastMessage);
-      return { chat, result, response: result.response };
+      return { chat, result, response: result.response, modelUsed: modelName };
     } catch (e) {
       lastError = e instanceof Error ? e : new Error(String(e));
-      // Try next model on 404/model not found
-      if (!lastError.message.includes("404") && !lastError.message.includes("not found")) throw lastError;
+      const msg = lastError.message;
+      // Fall back to next model on quota (429) OR model-not-found (404) errors
+      const isRetryable = msg.includes("404") || msg.includes("not found") ||
+        msg.includes("429") || msg.includes("RESOURCE_EXHAUSTED") ||
+        msg.includes("Too Many Requests") || msg.includes("QuotaFailure");
+      if (!isRetryable) throw lastError;
+      // Brief pause before trying next model on quota errors
+      if (msg.includes("429") || msg.includes("RESOURCE_EXHAUSTED")) {
+        await new Promise(r => setTimeout(r, 1500));
+      }
     }
   }
   throw lastError ?? new Error("All Gemini models failed");
