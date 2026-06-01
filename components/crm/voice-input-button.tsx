@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useLayoutEffect } from "react";
 import { Mic, MicOff, Loader2 } from "lucide-react";
 
 type ParsedCaseData = {
@@ -45,7 +45,9 @@ export function VoiceInputButton({ clients, onParsed }: Props) {
   const [errorMsg, setErrorMsg] = useState("");
   const recognitionRef = useRef<SpeechRecognitionInstance | null>(null);
   const clientsRef = useRef(clients);
-  clientsRef.current = clients;
+  useLayoutEffect(() => {
+    clientsRef.current = clients;
+  }, [clients]);
 
   // When transcript is ready → call parse API
   useEffect(() => {

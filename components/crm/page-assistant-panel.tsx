@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useEffect, useCallback } from "react";
+import { useState, useRef, useEffect, useCallback, startTransition } from "react";
 import { Sparkles, X, Send, Mic, MicOff, Loader2, ChevronDown, CheckCircle, XCircle } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
 import { useRouter } from "next/navigation";
@@ -43,7 +43,9 @@ export function PageAssistantPanel({ pageContext }: Props) {
       const greeting = pageContext
         ? `Привет! Я Джарвис. Контекст: ${pageContext}. Чем помочь?`
         : "Привет! Я Джарвис. Могу создать дело, найти клиента, показать статистику.";
-      setMessages([{ id: "init", role: "assistant", content: greeting }]);
+      startTransition(() => {
+        setMessages([{ id: "init", role: "assistant", content: greeting }]);
+      });
     }
   }, [open, messages.length, pageContext]);
 

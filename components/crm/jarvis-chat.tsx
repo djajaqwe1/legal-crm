@@ -257,7 +257,7 @@ export function JarvisChat() {
     } finally {
       setIsLoading(false);
     }
-  }, [messages]);
+  }, [messages, isLoading]);
 
   const handleConfirm = useCallback(async () => {
     if (!pendingAction) return;

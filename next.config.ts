@@ -1,9 +1,11 @@
 import type { NextConfig } from "next";
-import path from "path";
 
 const nextConfig: NextConfig = {
-  /** Явный корень трассировки при нескольких lockfile на машине */
-  outputFileTracingRoot: path.join(process.cwd()),
+  // Explicitly set the Turbopack root to prevent it from traversing up to
+  // C:\Users\Jalil\package-lock.json and generating paths with Cyrillic chars
+  turbopack: {
+    root: __dirname,
+  },
 };
 
 export default nextConfig;

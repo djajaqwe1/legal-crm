@@ -1,8 +1,6 @@
 import { NextResponse } from "next/server";
 import { addDocument } from "@/lib/crm-repository";
 
-export const config = { api: { bodyParser: false } };
-
 const ALLOWED_TYPES = new Set([
   "application/pdf",
   "application/msword",

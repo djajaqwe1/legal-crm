@@ -37,7 +37,6 @@ const SYSTEM_PROMPT = `Ты — Джарвис, умный AI-помощник �
 и спроси подтверждение. Отвечай на русском языке, кратко и по делу.`;
 
 // Tool declarations for Gemini
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 const tools = [
   {
     name: "create_case",

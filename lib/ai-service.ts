@@ -5,9 +5,9 @@ import { LEGAL_TEAM_CONFIG } from "./agents/config";
 
 const MODELS = [
   "gemini-2.0-flash",
-  "gemini-flash-latest",
-  "gemini-pro-latest",
-  "gemini-3-flash-preview"
+  "gemini-2.0-flash-lite",
+  "gemini-1.5-flash",
+  "gemini-1.5-flash-8b",
 ];
 
 // Обертка для совместимости со старым кодом

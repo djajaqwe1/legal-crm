@@ -40,6 +40,9 @@ export default async function PortalDashboardPage() {
 
   const activeCases = cases.filter(c => caseStatusToRu[c.status] !== "Завершено");
   const doneCases = cases.filter(c => caseStatusToRu[c.status] === "Завершено");
+  // Server component: Date.now() runs once per request, not in a hook
+  // eslint-disable-next-line react-hooks/purity
+  const now = Date.now();
 
   return (
     <main className="mx-auto max-w-3xl space-y-8 px-4 py-8">
@@ -84,7 +87,6 @@ export default async function PortalDashboardPage() {
                 const statusRu = caseStatusToRu[c.status] ?? "Новый";
                 const totalTasks = c.tasks.length;
                 const doneTasks = c.tasks.filter(t => t.completed).length;
-                const now = Date.now();
                 const deadlineDiff = c.deadline ? Math.ceil((c.deadline.getTime() - now) / 86400000) : null;
                 const isOverdue = deadlineDiff !== null && deadlineDiff < 0;
 
