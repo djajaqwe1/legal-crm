@@ -4,17 +4,15 @@ import { prisma } from "@/lib/prisma";
 import { resolveWorkspaceId } from "@/lib/workspace-scope";
 import { ruToCaseStatus, caseStatusToRu } from "@/lib/case-status";
 import { CaseStatus, ContractStatus } from "@/lib/generated-client";
+import {
+  GEMINI_MODELS,
+  formatGeminiUserError,
+  isGeminiRetryableError,
+} from "@/lib/gemini-models";
 
 export const dynamic = "force-dynamic";
 
 const GEMINI_KEY = process.env.GEMINI_API_KEY ?? "";
-// Each model has its OWN quota bucket on free tier — fallback to next on 429 too
-const GEMINI_MODELS = [
-  "gemini-2.0-flash",
-  "gemini-2.0-flash-lite",
-  "gemini-1.5-flash",
-  "gemini-1.5-flash-8b",
-];
 
 // Simple in-memory rate limiter: max 30 requests per minute per IP
 const rateLimitMap = new Map<string, { count: number; resetAt: number }>();
@@ -412,12 +410,7 @@ async function callGeminiWithFallback(
     } catch (e) {
       lastError = e instanceof Error ? e : new Error(String(e));
       const msg = lastError.message;
-      // Fall back to next model on quota (429) OR model-not-found (404) errors
-      const isRetryable = msg.includes("404") || msg.includes("not found") ||
-        msg.includes("429") || msg.includes("RESOURCE_EXHAUSTED") ||
-        msg.includes("Too Many Requests") || msg.includes("QuotaFailure");
-      if (!isRetryable) throw lastError;
-      // Brief pause before trying next model on quota errors
+      if (!isGeminiRetryableError(msg)) throw lastError;
       if (msg.includes("429") || msg.includes("RESOURCE_EXHAUSTED")) {
         await new Promise(r => setTimeout(r, 1500));
       }
@@ -571,14 +564,9 @@ export async function POST(req: Request) {
     });
   } catch (error: unknown) {
     const msg = error instanceof Error ? error.message : "Server error";
-    // Handle quota/rate-limit errors gracefully
-    if (msg.includes("429") || msg.includes("Too Many Requests") || msg.includes("RESOURCE_EXHAUSTED") || msg.includes("QuotaFailure")) {
-      return NextResponse.json(
-        { error: "Превышен лимит запросов к AI (бесплатный тариф Gemini). Подождите 1-2 минуты и попробуйте снова." },
-        { status: 429 },
-      );
-    }
-    return NextResponse.json({ error: msg }, { status: 500 });
+    const userMessage = formatGeminiUserError(msg);
+    const status = msg.includes("429") || msg.includes("RESOURCE_EXHAUSTED") ? 429 : 503;
+    return NextResponse.json({ error: userMessage }, { status });
   }
 }
 

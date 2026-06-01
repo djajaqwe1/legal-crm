@@ -2,13 +2,7 @@
 
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { LEGAL_TEAM_CONFIG } from "./agents/config";
-
-const MODELS = [
-  "gemini-2.0-flash",
-  "gemini-2.0-flash-lite",
-  "gemini-1.5-flash",
-  "gemini-1.5-flash-8b",
-];
+import { GEMINI_MODELS, isGeminiRetryableError } from "./gemini-models";
 
 // Обертка для совместимости со старым кодом
 export async function askGeminiByCase(prompt: string, systemPrompt?: string) {
@@ -43,7 +37,7 @@ export async function generateWithFallback(prompt: string, systemPrompt?: string
   type AiError = { status?: number; message?: string };
   let lastError: unknown = null;
 
-  for (const modelName of MODELS) {
+  for (const modelName of GEMINI_MODELS) {
     try {
       console.log(`>>> AI TRY (v1): ${modelName}`);
       const model = genAI.getGenerativeModel({ model: modelName });
@@ -83,6 +77,12 @@ export async function generateWithFallback(prompt: string, systemPrompt?: string
             ? "not found (404)"
             : "service unavailable (503/500)";
         console.warn(`Model ${modelName} ${reason}. Trying next model...`);
+        if (isQuotaError) await new Promise(r => setTimeout(r, 1500));
+        continue;
+      }
+
+      if (isGeminiRetryableError(e?.message ?? "")) {
+        console.warn(`Model ${modelName} retryable error. Trying next model...`);
         continue;
       }
 

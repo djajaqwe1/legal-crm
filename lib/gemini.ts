@@ -1,6 +1,7 @@
 "use server";
 
 import { generateWithFallback } from "@/lib/ai-service";
+import { formatGeminiUserError } from "@/lib/gemini-models";
 import type { CaseAssistantContext } from "@/lib/crm-repository";
 
 export async function askGeminiByCase(
@@ -17,28 +18,8 @@ export async function askGeminiByCase(
     );
   } catch (error: unknown) {
     console.error("Gemini API Error in askGeminiByCase:", error);
-    
-    const e = error as { status?: number; message?: string };
-    const isQuotaError =
-      e?.status === 429 ||
-      e?.message?.includes("429") ||
-      e?.message?.includes("quota");
-
-    if (isQuotaError) {
-      return "Превышена квота запросов AI. Пожалуйста, подождите 60 секунд. Если вы на бесплатном тарифе, лимиты очень строгие. Рекомендуется использовать API-ключ от платного аккаунта Google Cloud.";
-    }
-
-    const isNotFoundError =
-      e?.status === 404 ||
-      e?.message?.includes("404") ||
-      e?.message?.includes("not found");
-
-    if (isNotFoundError) {
-      console.error("Critical: All models returned 404.", error);
-      return `Ошибка AI (404): Модели не найдены или доступ ограничен. Техническая ошибка: ${error instanceof Error ? error.message : JSON.stringify(error)}`;
-    }
-    
-    return `Ошибка AI: ${error instanceof Error ? error.message : "Неизвестная ошибка"}`;
+    const msg = error instanceof Error ? error.message : String(error);
+    return formatGeminiUserError(msg);
   }
 }
 

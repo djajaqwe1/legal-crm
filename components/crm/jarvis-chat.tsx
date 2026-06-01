@@ -220,13 +220,17 @@ export function JarvisChat() {
       };
 
       if (data.error) {
-        const isQuota = res.status === 429 || (data.error ?? "").includes("лимит");
+        const raw = data.error ?? "";
+        const isQuota = res.status === 429 || raw.includes("лимит") || raw.toLowerCase().includes("quota");
+        const isTechnical = raw.includes("GoogleGenerativeAI") || raw.includes("generativelanguage.googleapis.com");
         setMessages(prev => [...prev, {
           id: Date.now().toString(),
           role: "assistant" as const,
           content: isQuota
             ? "⏳ Превышен лимит Gemini API. Подождите 1-2 минуты и попробуйте снова.\n\nЕсли ошибка повторяется — создайте новый API ключ на aistudio.google.com и обновите переменную GEMINI_API_KEY в Vercel."
-            : (data.error ?? "Неизвестная ошибка"),
+            : isTechnical
+              ? "Не удалось получить ответ от AI. Попробуйте через минуту."
+              : raw || "Неизвестная ошибка",
           isError: true,
         }]);
         return;
