@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { prisma } from "@/lib/prisma";
 import { resolveWorkspaceId } from "@/lib/workspace-scope";
-import { GEMINI_MODELS } from "@/lib/gemini-models";
+import { GEMINI_MODELS, formatGeminiUserError } from "@/lib/gemini-models";
 import { CaseKind, CaseStatus, ClientCategory } from "@/lib/generated-client";
 import { ruToCaseStatus } from "@/lib/case-status";
 import { appendJarvisMessages } from "@/lib/jarvis/sessions";
