@@ -1,8 +1,10 @@
 import { NextResponse } from "next/server";
 import { getCaseAssistantContext } from "@/lib/crm-repository";
-import { askGeminiByCase } from "@/lib/gemini";
 import { prisma } from "@/lib/prisma";
 import { resolveWorkspaceId } from "@/lib/workspace-scope";
+import { formatGeminiUserError } from "@/lib/gemini-models";
+import { runCaseAgent } from "@/lib/case-agent/agent";
+import { autoGenerateCaseTasks, matchCaseTaskIntent } from "@/lib/case-agent/intents";
 
 type Params = {
   params: Promise<{ id: string }>;
@@ -39,6 +41,10 @@ export async function POST(request: Request, { params }: Params) {
       return NextResponse.json({ error: "Workspace not configured." }, { status: 503 });
     }
 
+    if (!process.env.GEMINI_API_KEY) {
+      return NextResponse.json({ error: "GEMINI_API_KEY не настроен" }, { status: 503 });
+    }
+
     const { id } = await params;
     const body = (await request.json()) as { message?: string };
 
@@ -53,25 +59,55 @@ export async function POST(request: Request, { params }: Params) {
       where: { id, workspaceId: wid },
     });
     if (!k) {
-      return NextResponse.json({ error: "Case not found." }, { status: 404 });
+      return NextResponse.json({ error: "Case not found" }, { status: 404 });
     }
 
-    const context = await getCaseAssistantContext(id);
+    const context = await getCaseAssistantContext(id, { workspaceId: wid });
     if (!context) {
-      return NextResponse.json({ error: "Case not found." }, { status: 404 });
+      return NextResponse.json({ error: "Case not found" }, { status: 404 });
     }
+
+    const userMessage = body.message.trim();
 
     await prisma.chatMessage.create({
       data: {
         workspaceId: wid,
         legalCaseId: id,
         role: "user",
-        content: body.message,
+        content: userMessage,
         contextType: "case",
       },
     });
 
-    const reply = await askGeminiByCase(context, body.message);
+    const prior = await prisma.chatMessage.findMany({
+      where: { legalCaseId: id, contextType: "case", workspaceId: wid },
+      orderBy: { createdAt: "asc" },
+      take: 20,
+    });
+
+    const history = prior
+      .slice(0, -1)
+      .filter(m => m.role === "user" || m.role === "assistant")
+      .map(m => ({
+        role: m.role === "user" ? ("user" as const) : ("model" as const),
+        parts: [{ text: m.content }],
+      }));
+
+    let reply: string;
+    let tasksCreated = 0;
+    let toolUsed: string | undefined;
+
+    if (matchCaseTaskIntent(userMessage)) {
+      const auto = await autoGenerateCaseTasks(wid, context, userMessage);
+      reply = auto.reply;
+      tasksCreated = auto.tasksCreated;
+      toolUsed = "add_tasks";
+    } else {
+      const result = await runCaseAgent(wid, context, history, userMessage);
+      reply = result.reply;
+      tasksCreated = result.tasksCreated;
+      toolUsed = result.toolUsed;
+    }
 
     await prisma.chatMessage.create({
       data: {
@@ -83,31 +119,14 @@ export async function POST(request: Request, { params }: Params) {
       },
     });
 
-    return NextResponse.json({ reply });
+    return NextResponse.json({ reply, tasksCreated, toolUsed, refresh: tasksCreated > 0 });
   } catch (error: unknown) {
     console.error("Case AI Error:", error);
 
-    const isQuotaError =
-      (error as { status?: number })?.status === 429 ||
-      String(error).includes("429") ||
-      String(error).includes("quota");
+    const msg = error instanceof Error ? error.message : String(error);
+    const userMessage = formatGeminiUserError(msg);
+    const status = msg.includes("429") || msg.includes("RESOURCE_EXHAUSTED") ? 429 : 503;
 
-    if (isQuotaError) {
-      return NextResponse.json(
-        {
-          error:
-            "Превышена квота запросов AI. Пожалуйста, подождите 60 секунд и попробуйте снова. Если вы на бесплатном тарифе, лимиты очень строгие.",
-        },
-        { status: 429 },
-      );
-    }
-
-    return NextResponse.json(
-      {
-        error: error instanceof Error ? error.message : "AI service failed. Please try again.",
-        details: JSON.stringify(error),
-      },
-      { status: 500 },
-    );
+    return NextResponse.json({ error: userMessage }, { status });
   }
 }

@@ -1,9 +1,10 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import ReactMarkdown from "react-markdown";
-import { Loader2 } from "lucide-react";
+import { Loader2, CheckCircle2 } from "lucide-react";
 
 type Message = {
   role: "user" | "assistant";
@@ -14,7 +15,14 @@ type CaseAiChatProps = {
   caseId: string;
 };
 
+const QUICK_PROMPTS = [
+  "Поставь задачи по делу в CRM",
+  "Составь план следующих шагов и внеси задачи",
+  "Какие риски по материалам?",
+];
+
 export function CaseAiChat({ caseId }: CaseAiChatProps) {
+  const router = useRouter();
   const [input, setInput] = useState("");
   const [messages, setMessages] = useState<Message[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -42,11 +50,10 @@ export function CaseAiChat({ caseId }: CaseAiChatProps) {
     loadHistory();
   }, [caseId]);
 
-  async function onSubmit(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (!input.trim()) return;
+  async function sendMessage(text: string) {
+    if (!text.trim() || isLoading) return;
 
-    const nextUserMessage: Message = { role: "user", content: input.trim() };
+    const nextUserMessage: Message = { role: "user", content: text.trim() };
     setMessages((prev) => [...prev, nextUserMessage]);
     setInput("");
     setIsLoading(true);
@@ -58,7 +65,12 @@ export function CaseAiChat({ caseId }: CaseAiChatProps) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ message: nextUserMessage.content }),
       });
-      const payload = (await response.json()) as { reply?: string; error?: string };
+      const payload = (await response.json()) as {
+        reply?: string;
+        error?: string;
+        tasksCreated?: number;
+        refresh?: boolean;
+      };
 
       if (!response.ok) {
         throw new Error(payload.error ?? "AI helper error");
@@ -66,8 +78,12 @@ export function CaseAiChat({ caseId }: CaseAiChatProps) {
 
       setMessages((prev) => [
         ...prev,
-        { role: "assistant", content: payload.reply ?? "Пустой ответ модели." },
+        { role: "assistant", content: payload.reply ?? "Готово." },
       ]);
+
+      if (payload.refresh || (payload.tasksCreated ?? 0) > 0) {
+        router.refresh();
+      }
     } catch (submitError) {
       setError(
         submitError instanceof Error ? submitError.message : "Ошибка AI-сервиса",
@@ -77,8 +93,27 @@ export function CaseAiChat({ caseId }: CaseAiChatProps) {
     }
   }
 
+  async function onSubmit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    await sendMessage(input);
+  }
+
   return (
     <div className="space-y-4">
+      <div className="flex flex-wrap gap-2">
+        {QUICK_PROMPTS.map(p => (
+          <button
+            key={p}
+            type="button"
+            onClick={() => void sendMessage(p)}
+            disabled={isLoading}
+            className="rounded-full border border-zinc-200 px-3 py-1 text-xs text-zinc-600 hover:bg-zinc-50 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800"
+          >
+            {p}
+          </button>
+        ))}
+      </div>
+
       <div className="max-h-[360px] space-y-3 overflow-y-auto rounded-lg border border-zinc-200 p-4 dark:border-zinc-800">
         {isHistoryLoading ? (
           <div className="flex items-center justify-center py-8">
@@ -86,7 +121,7 @@ export function CaseAiChat({ caseId }: CaseAiChatProps) {
           </div>
         ) : messages.length === 0 ? (
           <p className="text-sm text-zinc-500">
-            Задай вопрос по делу: стратегия, список документов, риски, следующие шаги.
+            AI сам вносит задачи и обновляет дело. Например: «Поставь задачи по делу в CRM».
           </p>
         ) : (
           messages.map((message, index) => (
@@ -114,13 +149,19 @@ export function CaseAiChat({ caseId }: CaseAiChatProps) {
         <input
           value={input}
           onChange={(event) => setInput(event.target.value)}
-          placeholder="Например: Составь план следующего шага по делу"
+          placeholder="Например: Сам придумай задачи и внеси в систему"
           className="flex-1 rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
         />
         <Button type="submit" disabled={isLoading}>
-          {isLoading ? "Думаю..." : "Спросить AI"}
+          {isLoading ? "Вношу…" : "Выполнить"}
         </Button>
       </form>
+
+      <p className="flex items-center gap-1.5 text-[11px] text-zinc-400">
+        <CheckCircle2 className="h-3.5 w-3.5" />
+        Задачи и статус дела сохраняются в CRM автоматически
+      </p>
+
       {error ? <p className="text-sm text-red-600">{error}</p> : null}
     </div>
   );

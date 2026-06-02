@@ -51,7 +51,7 @@ export default async function CaseAssistantPage({ params }: PageProps) {
       <div className="grid gap-6 lg:grid-cols-3">
         <Card className="lg:col-span-2 border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-900">
           <CardHeader>
-            <CardTitle>Case AI Assistant (Gemini)</CardTitle>
+            <CardTitle>AI-оператор по делу</CardTitle>
           </CardHeader>
           <CardContent>
             {context ? (

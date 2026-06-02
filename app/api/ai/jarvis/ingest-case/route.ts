@@ -186,6 +186,6 @@ ${comment ? `Комментарий юриста: ${comment}` : ""}`;
     });
   } catch (e) {
     const msg = e instanceof Error ? e.message : "Import failed";
-    return NextResponse.json({ error: msg }, { status: 500 });
+    return NextResponse.json({ error: formatGeminiUserError(msg) }, { status: 500 });
   }
 }

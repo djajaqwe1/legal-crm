@@ -186,8 +186,9 @@ export type CaseAssistantContext = {
   status: string;
   deadline: string;
   client: string;
+  description?: string | null;
   tasks: Array<{ title: string; completed: boolean; dueDate: string }>;
-  documents: Array<{ name: string; path: string }>;
+  documents: Array<{ name: string; path: string; extractedText?: string | null }>;
 };
 
 const statusMap: Record<CaseStatus, string> = {
@@ -600,6 +601,7 @@ export async function getCaseAssistantContext(
         ? item.deadline.toLocaleDateString("ru-RU")
         : "Без срока",
       client: item.client.name,
+      description: item.description,
       tasks: item.tasks.map((task) => ({
         title: task.title,
         completed: task.completed,
@@ -608,6 +610,7 @@ export async function getCaseAssistantContext(
       documents: item.documents.map((document) => ({
         name: document.name,
         path: document.path,
+        extractedText: document.extractedText,
       })),
     };
   } catch {
