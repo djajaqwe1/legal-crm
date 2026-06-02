@@ -4,6 +4,7 @@ import { ruToCaseStatus, caseStatusToRu } from "@/lib/case-status";
 import { CaseStatus, ContractStatus } from "@/lib/generated-client";
 import { GEMINI_MODELS } from "@/lib/gemini-models";
 import { buildDocSystemPrompt } from "@/lib/doc-templates";
+import { getWorkspaceAnalytics } from "@/lib/analytics/workspace-analytics";
 import type { JarvisAction, JarvisToolResult } from "./types";
 
 const GEMINI_KEY = process.env.GEMINI_API_KEY ?? "";
@@ -47,6 +48,15 @@ export async function executeJarvisTool(
   args: Record<string, unknown>,
 ): Promise<JarvisToolResult> {
   const actions: JarvisAction[] = [];
+
+  if (toolName === "get_analytics") {
+    const data = await getWorkspaceAnalytics(workspaceId);
+    return {
+      success: true,
+      data,
+      message: `Дел: ${data.totals.cases}, консультаций: ${data.totals.consultations}, судебных: ${data.totals.courtCases}, документов: ${data.totals.documents}. Оплачено: ${data.totals.paymentsTotal.toLocaleString("ru-RU")} ₸`,
+    };
+  }
 
   if (toolName === "navigate_to") {
     const { page, id, query } = args as { page: string; id?: string; query?: string };

@@ -24,27 +24,33 @@ model Workspace {
   contracts    Contract[]
   chatMessages ChatMessage[]
   jarvisSessions JarvisSession[]
+  paymentTransactions PaymentTransaction[]
 }
 
 model Client {
-  id                  String        @id @default(cuid())
-  workspaceId       String
-  name              String
-  manager           String
-  createdAt         DateTime      @default(now())
-  updatedAt         DateTime      @updatedAt
-  email             String?
-  phone             String?
-  /// Scrypt-хэш пароля личного кабинета (salt:hash hex). null — вход ещё не активирован.
-  portalPasswordHash String?
-  contracts         Contract[]
-  cases             LegalCase[]
-  objects           LegalObject[]
-  chatMessages      ChatMessage[]
-  workspace         Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  id                  String           @id @default(cuid())
+  workspaceId         String
+  name                String
+  manager             String
+  /// Физлицо или юрлицо — для структуры папок как на OneDrive
+  category            ClientCategory   @default(LEGAL_ENTITY)
+  /// Группа: «Физлица», «Юрлица», имя крупного клиента
+  folderGroup         String?
+  createdAt           DateTime         @default(now())
+  updatedAt           DateTime         @updatedAt
+  email               String?
+  phone               String?
+  portalPasswordHash  String?
+  contracts           Contract[]
+  cases               LegalCase[]
+  objects             LegalObject[]
+  chatMessages        ChatMessage[]
+  paymentTransactions PaymentTransaction[]
+  workspace           Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
 
   @@unique([workspaceId, email])
   @@index([workspaceId])
+  @@index([workspaceId, category])
 }
 
 model LegalObject {
@@ -63,27 +69,42 @@ model LegalObject {
 }
 
 model LegalCase {
-  id          String         @id @default(cuid())
-  workspaceId String
-  code        String
-  title       String
-  status      CaseStatus     @default(NEW)
-  deadline    DateTime?
-  clientId    String
-  objectId    String?
-  createdAt   DateTime       @default(now())
-  updatedAt   DateTime       @updatedAt
-  description String?
-  documents   CaseDocument[]
-  contracts   Contract[]
-  client      Client         @relation(fields: [clientId], references: [id], onDelete: Cascade)
-  object      LegalObject?   @relation(fields: [objectId], references: [id])
-  tasks       Task[]
-  messages    ChatMessage[]
-  workspace   Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  id              String              @id @default(cuid())
+  workspaceId     String
+  code            String
+  title           String
+  status          CaseStatus          @default(NEW)
+  /// CONSULTATION — консультация; COURT — судебное; PROJECT — проект документов
+  kind            CaseKind            @default(COURT)
+  outcome         CaseOutcome?
+  courtInstance   CourtInstance?
+  /// Связь: консультация → судебное дело
+  parentCaseId    String?
+  parentCase      LegalCase?          @relation("CaseTree", fields: [parentCaseId], references: [id], onDelete: SetNull)
+  childCases      LegalCase[]         @relation("CaseTree")
+  assignedLawyer  String?
+  expectedAmount  Float?
+  paidAmount      Float?
+  deadline        DateTime?
+  clientId        String
+  objectId        String?
+  createdAt       DateTime            @default(now())
+  updatedAt       DateTime            @updatedAt
+  description     String?
+  documents       CaseDocument[]
+  contracts       Contract[]
+  client          Client              @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  object          LegalObject?        @relation(fields: [objectId], references: [id])
+  tasks           Task[]
+  messages        ChatMessage[]
+  payments        PaymentTransaction[]
+  workspace       Workspace           @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
 
   @@unique([workspaceId, code])
   @@index([workspaceId])
+  @@index([workspaceId, kind])
+  @@index([workspaceId, outcome])
+  @@index([parentCaseId])
 }
 
 model Task {
@@ -98,12 +119,21 @@ model Task {
 }
 
 model CaseDocument {
-  id          String    @id @default(cuid())
-  name        String
-  path        String
-  legalCaseId String
-  createdAt   DateTime  @default(now())
-  legalCase   LegalCase @relation(fields: [legalCaseId], references: [id], onDelete: Cascade)
+  id              String    @id @default(cuid())
+  name            String
+  path            String
+  legalCaseId     String
+  /// decision | contract | evidence | correspondence | other
+  category        String    @default("other")
+  storageProvider String    @default("crm")
+  externalUrl     String?
+  mimeType        String?
+  sizeBytes       Int?
+  extractedText   String?   @db.Text
+  createdAt       DateTime  @default(now())
+  legalCase       LegalCase @relation(fields: [legalCaseId], references: [id], onDelete: Cascade)
+
+  @@index([legalCaseId])
 }
 
 model Contract {
@@ -155,6 +185,38 @@ enum CaseStatus {
   CLOSED
 }
 
+enum ClientCategory {
+  INDIVIDUAL
+  LEGAL_ENTITY
+}
+
+enum CaseKind {
+  CONSULTATION
+  COURT
+  PROJECT
+}
+
+enum CaseOutcome {
+  PENDING
+  WON_FULL
+  WON_PARTIAL
+  DISMISSED
+  REJECTED
+  LEFT_WITHOUT_CONSIDERATION
+  TERMINATED
+  SETTLED
+  IN_APPEAL
+  IN_CASSATION
+  IN_SUPREME
+}
+
+enum CourtInstance {
+  FIRST
+  APPEAL
+  CASSATION
+  SUPREME
+}
+
 enum ContractStatus {
   DRAFT
   NEGOTIATION
@@ -189,4 +251,25 @@ model JarvisMessage {
   session   JarvisSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
 
   @@index([sessionId, createdAt])
+}
+
+/// Платежи: Rekassa, 1С, ручной ввод
+model PaymentTransaction {
+  id          String     @id @default(cuid())
+  workspaceId String
+  legalCaseId String?
+  clientId    String?
+  amount      Float
+  currency    String     @default("KZT")
+  source      String
+  externalId  String?
+  paidAt      DateTime   @default(now())
+  description String?
+  workspace   Workspace  @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  legalCase   LegalCase? @relation(fields: [legalCaseId], references: [id], onDelete: SetNull)
+  client      Client?    @relation(fields: [clientId], references: [id], onDelete: SetNull)
+
+  @@index([workspaceId, paidAt])
+  @@index([legalCaseId])
+  @@index([clientId])
 }

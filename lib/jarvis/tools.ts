@@ -63,6 +63,11 @@ export const JARVIS_TOOLS = [
     },
   },
   {
+    name: "get_analytics",
+    description: "Расширенная аналитика: исходы дел, консультации vs суд, финансы, юристы, документы.",
+    parameters: { type: SchemaType.OBJECT, properties: {} },
+  },
+  {
     name: "navigate_to",
     description: "Открыть раздел CRM или карточку. Выполняется сразу — переводит юриста на нужный экран.",
     parameters: {

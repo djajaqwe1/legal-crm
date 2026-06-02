@@ -1,12 +1,20 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Menu, PanelRight, Plus, Sparkles } from "lucide-react";
+import { Menu, PanelRightClose, PanelRightOpen, Plus, Sparkles } from "lucide-react";
 import { CrmSidebar } from "@/components/crm/sidebar";
 import { JarvisChat } from "@/components/crm/jarvis-chat";
 import { JarvisSessionSidebar } from "@/components/crm/jarvis-session-sidebar";
 import { ThemeToggle } from "@/components/crm/theme-toggle";
 import type { JarvisSessionListItem } from "@/lib/jarvis/sessions";
+
+const HISTORY_KEY = "jarvis-history-open";
+
+function readHistoryOpen(): boolean {
+  if (typeof window === "undefined") return true;
+  const v = localStorage.getItem(HISTORY_KEY);
+  return v !== "false";
+}
 
 export function JarvisWorkspace() {
   const [navOpen, setNavOpen] = useState(false);
@@ -14,6 +22,14 @@ export function JarvisWorkspace() {
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [sessions, setSessions] = useState<JarvisSessionListItem[]>([]);
   const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    setHistoryOpen(readHistoryOpen());
+  }, []);
+
+  useEffect(() => {
+    localStorage.setItem(HISTORY_KEY, String(historyOpen));
+  }, [historyOpen]);
 
   const refreshSessions = useCallback(async () => {
     const res = await fetch("/api/ai/jarvis/sessions");
@@ -71,22 +87,20 @@ export function JarvisWorkspace() {
 
   return (
     <div className="flex h-screen overflow-hidden bg-zinc-50 text-zinc-900 dark:bg-zinc-950 dark:text-zinc-100">
-      {/* Left CRM drawer */}
       {navOpen && (
         <>
           <button
             type="button"
             className="fixed inset-0 z-40 bg-black/40 lg:hidden"
-            aria-label="Закрыть меню"
+            aria-label="Закрыть меню CRM"
             onClick={() => setNavOpen(false)}
           />
-          <aside className="fixed inset-y-0 left-0 z-50 w-[280px] shadow-xl lg:relative lg:shadow-none">
+          <aside className="fixed inset-y-0 left-0 z-50 w-[280px] shadow-xl lg:relative lg:z-0 lg:shadow-none">
             <CrmSidebar onNavigate={() => setNavOpen(false)} />
           </aside>
         </>
       )}
 
-      {/* Main column */}
       <div className="flex min-w-0 flex-1 flex-col">
         <header className="flex h-14 shrink-0 items-center gap-2 border-b border-zinc-200/80 bg-white/80 px-3 backdrop-blur dark:border-zinc-800 dark:bg-zinc-950/80">
           <button
@@ -105,7 +119,7 @@ export function JarvisWorkspace() {
 
           <button
             type="button"
-            onClick={handleNewChat}
+            onClick={() => void handleNewChat()}
             className="hidden items-center gap-1.5 rounded-lg border border-zinc-200 px-3 py-1.5 text-xs font-medium hover:bg-zinc-50 dark:border-zinc-700 dark:hover:bg-zinc-900 sm:flex"
           >
             <Plus className="h-3.5 w-3.5" />
@@ -115,10 +129,10 @@ export function JarvisWorkspace() {
           <button
             type="button"
             onClick={() => setHistoryOpen(v => !v)}
-            className="flex h-9 w-9 items-center justify-center rounded-lg text-zinc-600 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-800 xl:hidden"
-            title="История чатов"
+            className="flex h-9 w-9 items-center justify-center rounded-lg text-zinc-600 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-800"
+            title={historyOpen ? "Скрыть историю чатов" : "Показать историю чатов"}
           >
-            <PanelRight className="h-5 w-5" />
+            {historyOpen ? <PanelRightClose className="h-5 w-5" /> : <PanelRightOpen className="h-5 w-5" />}
           </button>
 
           <div className="hidden sm:block">
@@ -134,21 +148,20 @@ export function JarvisWorkspace() {
         />
       </div>
 
-      {/* Right history sidebar */}
       {historyOpen && (
         <>
           <button
             type="button"
-            className="fixed inset-0 z-40 bg-black/40 xl:hidden"
+            className="fixed inset-0 z-40 bg-black/40 md:hidden"
             aria-label="Закрыть историю"
             onClick={() => setHistoryOpen(false)}
           />
-          <aside className="fixed inset-y-0 right-0 z-50 w-[300px] border-l border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-950 xl:relative xl:z-0">
+          <aside className="fixed inset-y-0 right-0 z-50 w-[min(100vw,300px)] border-l border-zinc-200 bg-white shadow-xl dark:border-zinc-800 dark:bg-zinc-950 md:relative md:z-0 md:w-[300px] md:shadow-none">
             <JarvisSessionSidebar
               sessions={sessions}
               activeSessionId={sessionId}
               onSelect={handleSelectSession}
-              onNewChat={handleNewChat}
+              onNewChat={() => void handleNewChat()}
               onRefresh={() => void refreshSessions()}
               onClose={() => setHistoryOpen(false)}
             />

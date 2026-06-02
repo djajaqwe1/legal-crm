@@ -15,6 +15,7 @@ import { Users, FileText, Briefcase, ChevronRight, ArrowUpRight, Calendar, Alert
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { AiInsightCard } from "@/components/crm/ai-insight-card";
+import { WorkspaceAnalyticsSection } from "@/components/crm/workspace-analytics-section";
 import type { DashboardStats } from "@/lib/crm-repository";
 
 function AttentionCard({ stats }: { stats: DashboardStats }) {
@@ -250,6 +251,8 @@ export default async function Home() {
           </Card>
         );
       })()}
+
+      <WorkspaceAnalyticsSection />
 
       <div className="grid gap-6 lg:grid-cols-3">
         <Card className="lg:col-span-2 border-zinc-200 bg-white shadow-sm dark:border-zinc-800 dark:bg-zinc-900">

@@ -2,10 +2,11 @@
 
 import { useState, useRef, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import { Send, Mic, MicOff, Loader2, CheckCircle, XCircle } from "lucide-react";
+import { Send, Mic, MicOff, Loader2, CheckCircle, XCircle, Paperclip, X, ChevronDown } from "lucide-react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { useJarvisVoice, isVoiceConfirm } from "@/components/crm/use-jarvis-voice";
+import { JARVIS_PRESETS, getPreset, type JarvisPresetId } from "@/lib/jarvis/presets";
 import type { JarvisAction, JarvisStep } from "@/lib/jarvis/types";
 
 type ToolResult = Record<string, unknown> | unknown[] | null;
@@ -32,9 +33,9 @@ type Props = {
 
 const SUGGESTIONS = [
   "Покажи статистику CRM",
+  "Расширенная аналитика дел",
   "Последние 5 дел",
   "Что просрочено?",
-  "Открой реестр договоров",
 ];
 
 function ResultCard({ toolName, data }: { toolName: string; data: ToolResult }) {
@@ -54,6 +55,54 @@ function ResultCard({ toolName, data }: { toolName: string; data: ToolResult }) 
             <p className="text-lg font-semibold tabular-nums">{value as number}</p>
           </div>
         ))}
+      </div>
+    );
+  }
+  if (toolName === "get_analytics" && typeof data === "object" && !Array.isArray(data) && "totals" in data) {
+    const d = data as {
+      totals: {
+        cases: number;
+        consultations: number;
+        courtCases: number;
+        documents: number;
+        paymentsTotal: number;
+        expectedTotal: number;
+        paidOnCases: number;
+      };
+      byOutcome: Record<string, number>;
+      byLawyer: Array<{ lawyer: string; cases: number }>;
+    };
+    return (
+      <div className="mt-3 space-y-3">
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+          {[
+            ["Дела", d.totals.cases],
+            ["Консультации", d.totals.consultations],
+            ["Судебные", d.totals.courtCases],
+            ["Документы", d.totals.documents],
+          ].map(([label, value]) => (
+            <div key={label as string} className="rounded-xl border border-zinc-200/80 bg-zinc-50/80 px-3 py-2 dark:border-zinc-800 dark:bg-zinc-900/50">
+              <p className="text-[10px] uppercase tracking-wide text-zinc-400">{label}</p>
+              <p className="text-lg font-semibold tabular-nums">{value as number}</p>
+            </div>
+          ))}
+        </div>
+        <div className="rounded-xl border border-zinc-200/80 bg-zinc-50/50 px-3 py-2 text-[13px] dark:border-zinc-800 dark:bg-zinc-900/30">
+          <p className="text-[10px] uppercase tracking-wide text-zinc-400">Финансы</p>
+          <p>Ожидается: {d.totals.expectedTotal.toLocaleString("ru-RU")} ₸ · Оплачено по делам: {d.totals.paidOnCases.toLocaleString("ru-RU")} ₸ · Транзакции: {d.totals.paymentsTotal.toLocaleString("ru-RU")} ₸</p>
+        </div>
+        {Object.keys(d.byOutcome).length > 0 && (
+          <div className="rounded-xl border border-zinc-200/80 px-3 py-2 dark:border-zinc-800">
+            <p className="mb-2 text-[10px] uppercase tracking-wide text-zinc-400">Исходы дел</p>
+            <div className="flex flex-wrap gap-2">
+              {Object.entries(d.byOutcome).map(([label, count]) => (
+                <span key={label} className="rounded-full bg-violet-50 px-2.5 py-1 text-[11px] text-violet-800 dark:bg-violet-900/30 dark:text-violet-200">
+                  {label}: {count}
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
     );
   }
@@ -87,15 +136,21 @@ export function JarvisChat({ sessionId, onSessionActivity, onSessionTitle }: Pro
   const router = useRouter();
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
+  const [presetId, setPresetId] = useState<JarvisPresetId>("chat");
+  const [files, setFiles] = useState<File[]>([]);
+  const [presetOpen, setPresetOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [loadingHistory, setLoadingHistory] = useState(true);
   const [pendingAction, setPendingAction] = useState<Message["pendingAction"]>(undefined);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const endRef = useRef<HTMLDivElement>(null);
   const pendingRef = useRef(pendingAction);
   pendingRef.current = pendingAction;
   const sendRef = useRef<(text: string, confirmed?: boolean, action?: Message["pendingAction"]) => Promise<void>>(
     async () => {},
   );
+
+  const preset = getPreset(presetId);
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -106,6 +161,8 @@ export function JarvisChat({ sessionId, onSessionActivity, onSessionTitle }: Pro
       setLoadingHistory(true);
       setMessages([]);
       setPendingAction(undefined);
+      setFiles([]);
+      setPresetId("chat");
       try {
         const res = await fetch(`/api/ai/jarvis/sessions/${sessionId}`);
         if (!res.ok) throw new Error("load failed");
@@ -136,6 +193,62 @@ export function JarvisChat({ sessionId, onSessionActivity, onSessionTitle }: Pro
       if (a.type === "refresh") router.refresh();
     }
   }, [router]);
+
+  const ingestCase = useCallback(async (comment: string, uploadFiles: File[]) => {
+    const userMsg: Message = {
+      id: `u-${Date.now()}`,
+      role: "user",
+      content: comment || `Загрузка материалов: ${uploadFiles.map(f => f.name).join(", ")}`,
+    };
+    setMessages(prev => [...prev, userMsg]);
+    setInput("");
+    setFiles([]);
+    setIsLoading(true);
+
+    try {
+      const form = new FormData();
+      form.append("sessionId", sessionId);
+      form.append("comment", comment);
+      for (const f of uploadFiles) form.append("files", f);
+
+      const res = await fetch("/api/ai/jarvis/ingest-case", { method: "POST", body: form });
+      const data = await res.json() as {
+        reply?: string;
+        error?: string;
+        actions?: JarvisAction[];
+        case?: { code: string };
+      };
+
+      if (data.error) {
+        setMessages(prev => [...prev, {
+          id: `e-${Date.now()}`,
+          role: "assistant",
+          content: data.error ?? "Ошибка импорта",
+          isError: true,
+        }]);
+        return;
+      }
+
+      applyActions(data.actions);
+      setMessages(prev => [...prev, {
+        id: `a-${Date.now()}`,
+        role: "assistant",
+        content: data.reply ?? "Дело зарегистрировано.",
+      }]);
+
+      if (data.case?.code) onSessionTitle?.(`Дело ${data.case.code}`);
+      onSessionActivity?.();
+    } catch {
+      setMessages(prev => [...prev, {
+        id: `e-${Date.now()}`,
+        role: "assistant",
+        content: "Не удалось загрузить материалы.",
+        isError: true,
+      }]);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [sessionId, applyActions, onSessionActivity, onSessionTitle]);
 
   const sendMessage = useCallback(async (
     text: string,
@@ -238,6 +351,24 @@ export function JarvisChat({ sessionId, onSessionActivity, onSessionTitle }: Pro
     },
   });
 
+  const handleSubmit = () => {
+    if (presetId === "register_case") {
+      if (!files.length) return;
+      void ingestCase(input.trim(), files);
+      return;
+    }
+
+    const text = input.trim() || preset.starterPrompt || "";
+    if (!text) return;
+
+    if (preset.starterPrompt && !input.trim()) {
+      void sendMessage(preset.starterPrompt);
+      return;
+    }
+
+    void sendMessage(text);
+  };
+
   const handleConfirm = async () => {
     if (!pendingAction) return;
     const a = pendingAction;
@@ -253,6 +384,10 @@ export function JarvisChat({ sessionId, onSessionActivity, onSessionTitle }: Pro
       { id: `d-${Date.now()}`, role: "assistant", content: "Действие отменено." },
     ]);
   };
+
+  const canSubmit = presetId === "register_case"
+    ? files.length > 0 && !isLoading
+    : (input.trim() || preset.starterPrompt) && !isLoading;
 
   if (loadingHistory) {
     return (
@@ -272,7 +407,7 @@ export function JarvisChat({ sessionId, onSessionActivity, onSessionTitle }: Pro
                 Чем могу помочь?
               </h2>
               <p className="mt-2 max-w-md text-[15px] leading-relaxed text-zinc-500">
-                Управляю делами, клиентами и договорами. История сохраняется автоматически.
+                Дела, клиенты, аналитика, импорт материалов — выберите действие ниже.
               </p>
               <div className="mt-8 flex flex-wrap justify-center gap-2">
                 {SUGGESTIONS.map(s => (
@@ -329,7 +464,7 @@ export function JarvisChat({ sessionId, onSessionActivity, onSessionTitle }: Pro
             {isLoading && (
               <div className="flex items-center gap-2 text-sm text-zinc-400">
                 <Loader2 className="h-4 w-4 animate-spin" />
-                Думаю…
+                {presetId === "register_case" ? "Анализирую материалы…" : "Думаю…"}
               </div>
             )}
           </div>
@@ -339,6 +474,79 @@ export function JarvisChat({ sessionId, onSessionActivity, onSessionTitle }: Pro
 
       <div className="shrink-0 border-t border-zinc-200/80 bg-white/90 px-4 py-4 backdrop-blur dark:border-zinc-800 dark:bg-zinc-950/90">
         <div className="mx-auto max-w-3xl">
+          <div className="mb-2 flex flex-wrap items-center gap-2">
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => setPresetOpen(v => !v)}
+                className="flex items-center gap-1.5 rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-1.5 text-xs font-medium text-zinc-700 hover:bg-zinc-100 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-300"
+              >
+                {preset.label}
+                <ChevronDown className="h-3.5 w-3.5 opacity-60" />
+              </button>
+              {presetOpen && (
+                <>
+                  <button type="button" className="fixed inset-0 z-10" aria-label="Закрыть" onClick={() => setPresetOpen(false)} />
+                  <div className="absolute bottom-full left-0 z-20 mb-1 w-72 rounded-xl border border-zinc-200 bg-white py-1 shadow-lg dark:border-zinc-700 dark:bg-zinc-900">
+                    {JARVIS_PRESETS.map(p => (
+                      <button
+                        key={p.id}
+                        type="button"
+                        onClick={() => {
+                          setPresetId(p.id);
+                          setPresetOpen(false);
+                          setFiles([]);
+                        }}
+                        className={`block w-full px-3 py-2 text-left hover:bg-zinc-50 dark:hover:bg-zinc-800 ${p.id === presetId ? "bg-violet-50 dark:bg-violet-900/20" : ""}`}
+                      >
+                        <span className="block text-xs font-medium">{p.label}</span>
+                        <span className="block text-[10px] text-zinc-500">{p.description}</span>
+                      </button>
+                    ))}
+                  </div>
+                </>
+              )}
+            </div>
+
+            {preset.acceptsFiles && (
+              <>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  multiple
+                  accept=".txt,.pdf,text/plain,application/pdf"
+                  className="hidden"
+                  onChange={e => setFiles(Array.from(e.target.files ?? []))}
+                />
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  className="flex items-center gap-1.5 rounded-lg border border-dashed border-zinc-300 px-3 py-1.5 text-xs text-zinc-600 hover:border-violet-400 hover:text-violet-700 dark:border-zinc-600"
+                >
+                  <Paperclip className="h-3.5 w-3.5" />
+                  Прикрепить файлы
+                </button>
+              </>
+            )}
+          </div>
+
+          {files.length > 0 && (
+            <div className="mb-2 flex flex-wrap gap-2">
+              {files.map((f, i) => (
+                <span key={`${f.name}-${i}`} className="inline-flex items-center gap-1 rounded-full bg-zinc-100 px-2.5 py-1 text-[11px] dark:bg-zinc-800">
+                  {f.name}
+                  <button type="button" onClick={() => setFiles(prev => prev.filter((_, j) => j !== i))}>
+                    <X className="h-3 w-3" />
+                  </button>
+                </span>
+              ))}
+            </div>
+          )}
+
+          {preset.fileHint && (
+            <p className="mb-2 text-[11px] text-zinc-400">{preset.fileHint}</p>
+          )}
+
           {isListening && (
             <p className="mb-2 text-center text-xs text-zinc-500">
               {interim ? `«${interim}»` : "Слушаю…"}
@@ -351,10 +559,10 @@ export function JarvisChat({ sessionId, onSessionActivity, onSessionTitle }: Pro
               onKeyDown={e => {
                 if (e.key === "Enter" && !e.shiftKey) {
                   e.preventDefault();
-                  void sendMessage(input);
+                  handleSubmit();
                 }
               }}
-              placeholder="Сообщение Джарвису…"
+              placeholder={preset.placeholder}
               rows={1}
               disabled={isLoading}
               className="max-h-32 min-h-[44px] flex-1 resize-none bg-transparent px-2 py-2.5 text-[15px] leading-relaxed outline-none placeholder:text-zinc-400"
@@ -372,15 +580,17 @@ export function JarvisChat({ sessionId, onSessionActivity, onSessionTitle }: Pro
             </button>
             <button
               type="button"
-              onClick={() => void sendMessage(input)}
-              disabled={!input.trim() || isLoading}
+              onClick={handleSubmit}
+              disabled={!canSubmit}
               className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-zinc-900 text-white disabled:opacity-30 dark:bg-zinc-100 dark:text-zinc-900"
             >
               <Send className="h-4 w-4" />
             </button>
           </div>
           <p className="mt-2 text-center text-[11px] text-zinc-400">
-            Enter — отправить · Микрофон — голос (без озвучки ответов)
+            {presetId === "register_case"
+              ? "Выберите действие «Зарегистрировать дело», прикрепите файлы и отправьте"
+              : "Enter — отправить · Микрофон — голос (без озвучки ответов)"}
           </p>
         </div>
       </div>

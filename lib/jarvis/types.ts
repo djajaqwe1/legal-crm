@@ -27,6 +27,7 @@ export const READ_ONLY_TOOLS = new Set([
   "get_contracts",
   "get_overdue_cases",
   "find_case",
+  "get_analytics",
   "navigate_to",
   "generate_document",
 ]);
