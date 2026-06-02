@@ -62,7 +62,7 @@ function AttentionCard({ stats }: { stats: DashboardStats }) {
       color: "blue",
       title: `Новых лидов сегодня: ${stats.newLeadsToday}`,
       sub: "Заявки через AI-виджет на сайте",
-      href: "/admin/cases",
+      href: "/admin/clients",
     });
   }
 

@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
-import { CaseKind, CaseOutcome, CaseStatus } from "@/lib/generated-client";
+import { CaseKind, CaseOutcome } from "@/lib/generated-client";
+import { caseStatusToRu } from "@/lib/case-status";
 
 export type WorkspaceAnalytics = {
   totals: {
@@ -17,6 +18,12 @@ export type WorkspaceAnalytics = {
   byKind: Record<string, number>;
   byLawyer: Array<{ lawyer: string; cases: number }>;
   recentPayments: Array<{ amount: number; source: string; paidAt: string; caseCode?: string }>;
+};
+
+const KIND_LABELS: Record<CaseKind, string> = {
+  CONSULTATION: "Консультации",
+  COURT: "Судебные",
+  PROJECT: "Проекты документов",
 };
 
 const OUTCOME_LABELS: Record<CaseOutcome, string> = {
@@ -72,12 +79,14 @@ export async function getWorkspaceAnalytics(workspaceId: string): Promise<Worksp
   let paidOnCases = 0;
 
   for (const c of casesDetailed) {
-    byStatus[c.status] = (byStatus[c.status] ?? 0) + 1;
+    const statusLabel = caseStatusToRu[c.status] ?? c.status;
+    byStatus[statusLabel] = (byStatus[statusLabel] ?? 0) + 1;
     if (c.outcome) {
       const label = outcomeLabel(c.outcome);
       byOutcome[label] = (byOutcome[label] ?? 0) + 1;
     }
-    byKind[c.kind] = (byKind[c.kind] ?? 0) + 1;
+    const kindLabel = KIND_LABELS[c.kind] ?? c.kind;
+    byKind[kindLabel] = (byKind[kindLabel] ?? 0) + 1;
     if (c.kind === CaseKind.CONSULTATION) consultations++;
     if (c.kind === CaseKind.COURT) courtCases++;
     const lawyer = c.assignedLawyer?.trim() || "Не назначен";

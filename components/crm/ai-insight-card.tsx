@@ -37,7 +37,7 @@ export function AiInsightCard({ stats }: Props) {
       <CardHeader className="bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900 py-4">
         <CardTitle className="text-sm font-bold uppercase tracking-widest flex items-center gap-2">
           <Zap className="h-4 w-4 text-yellow-400 fill-yellow-400" />
-          Legal AI Инсайт
+          Джарвис · сводка
           {stats.isOffline && (
             <span title="Демо-режим" className="ml-auto">
               <WifiOff className="h-3 w-3 text-zinc-400" />

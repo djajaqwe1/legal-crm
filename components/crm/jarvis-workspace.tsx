@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { Menu, PanelRightClose, PanelRightOpen, Plus, Sparkles } from "lucide-react";
+import Link from "next/link";
 import { CrmSidebar } from "@/components/crm/sidebar";
 import { JarvisChat } from "@/components/crm/jarvis-chat";
 import { JarvisSessionSidebar } from "@/components/crm/jarvis-session-sidebar";
@@ -113,8 +114,10 @@ export function JarvisWorkspace() {
           </button>
 
           <div className="flex min-w-0 flex-1 items-center justify-center gap-2">
-            <Sparkles className="h-4 w-4 shrink-0 text-violet-500" />
-            <span className="truncate text-sm font-medium">Джарвис</span>
+            <Link href="/admin/dashboard" className="truncate text-sm font-medium hover:text-violet-600">
+              <Sparkles className="mr-1 inline h-4 w-4 shrink-0 text-violet-500" />
+              Джарвис
+            </Link>
           </div>
 
           <button

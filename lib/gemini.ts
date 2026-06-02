@@ -14,7 +14,7 @@ export async function askGeminiByCase(
     const result = await generateWithFallback(prompt);
     return (
       result.text ??
-      "Не удалось сгенерировать ответ. Попробуйте уточнить вопрос по делу."
+      "Не удалось сгенерировать ответ. Уточните вопрос по делу."
     );
   } catch (error: unknown) {
     console.error("Gemini API Error in askGeminiByCase:", error);
@@ -24,22 +24,27 @@ export async function askGeminiByCase(
 }
 
 function buildPrompt(context: CaseAssistantContext, userMessage: string) {
-  return `You are a legal AI assistant inside a CRM.
-Work ONLY based on the case data provided in the context below.
-If there is not enough data, write: "Insufficient data in the case file" and list what needs to be added.
-Do not invent facts, details, court data, or legal norms.
-Give the answer in Russian, briefly and structurally.
+  const docs = context.documents
+    .map(d => {
+      const text = d.extractedText?.trim();
+      return text ? `${d.name}: ${text.slice(0, 2000)}` : d.name;
+    })
+    .join("\n");
 
-CASE CONTEXT:
-- Code: ${context.code}
-- Title: ${context.title}
-- Client: ${context.client}
-- Status: ${context.status}
-- Deadline: ${context.deadline}
-- Tasks: ${JSON.stringify(context.tasks)}
-- Documents: ${JSON.stringify(context.documents)}
+  return `Ты — юридический AI-ассистент в CRM Казахстана.
+Отвечай по-русски, кратко и по делу. Опирайся на контекст ниже.
 
-LAWYER'S QUESTION:
+ДЕЛО: ${context.code} — ${context.title}
+Клиент: ${context.client}
+Статус: ${context.status}
+Дедлайн: ${context.deadline}
+${context.description ? `Описание: ${context.description}` : ""}
+
+Задачи: ${JSON.stringify(context.tasks)}
+Документы:
+${docs || "нет"}
+
+ВОПРОС:
 ${userMessage}
 `;
 }

@@ -19,7 +19,7 @@ import {
 import { ThemeToggle } from "@/components/crm/theme-toggle";
 
 const navItems = [
-  { label: "Джарвис ИИ", href: "/admin", icon: Bot },
+  { label: "Джарвис", href: "/admin", icon: Bot },
   { label: "Дашборд", href: "/admin/dashboard", icon: LayoutDashboard },
   { label: "Клиенты", href: "/admin/clients", icon: Users },
   { label: "Реестр дел", href: "/admin/cases", icon: Briefcase },
@@ -60,7 +60,7 @@ export function CrmSidebar({ onNavigate }: { onNavigate?: () => void } = {}) {
           </div>
           <div>
             <p className="text-[10px] font-bold uppercase tracking-widest text-zinc-400 leading-none">
-              Conglomerate
+              Конгломерат Алтай
             </p>
             <h1 className="text-lg font-bold tracking-tight">Legal CRM</h1>
           </div>

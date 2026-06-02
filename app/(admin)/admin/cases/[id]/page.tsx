@@ -10,6 +10,7 @@ import { AddTaskDialog, AddDocumentDialog, TaskItem, DocumentItem } from "@/comp
 import { CaseDescriptionEditor } from "@/components/crm/case-description-editor";
 import { CaseStatusControl } from "@/components/crm/case-status-control";
 import { CaseObjectControl } from "@/components/crm/case-object-control";
+import { contractStatusLabel } from "@/lib/contract-status";
 import {
   Briefcase,
   Calendar,
@@ -47,7 +48,7 @@ export default async function CaseDetailPage({ params }: PageProps) {
   const statusLabel = caseStatusToRu[caseData.status] ?? caseData.status;
 
   return (
-    <CrmShell pageContext={`Детали дела: "${caseData.title}". Клиент: ${caseData.client.name}. Статус: ${statusLabel}. Задач: ${caseData.tasks.length}, документов: ${caseData.documents.length}.`}>
+    <CrmShell hideAssistant pageContext={`Детали дела: "${caseData.title}". Клиент: ${caseData.client.name}. Статус: ${statusLabel}. Задач: ${caseData.tasks.length}, документов: ${caseData.documents.length}.`}>
       <header className="space-y-4 mb-8">
         <nav className="flex items-center gap-2 text-xs font-medium text-zinc-500 uppercase tracking-wider">
           <Link href="/admin/dashboard" className="hover:text-zinc-900 transition-colors flex items-center gap-1">
@@ -77,7 +78,7 @@ export default async function CaseDetailPage({ params }: PageProps) {
              <Link href={`/admin/cases/${id}/assistant`}>
               <Button className="bg-blue-600 hover:bg-blue-700 shadow-lg shadow-blue-100">
                 <MessageSquare className="mr-2 h-4 w-4" />
-                AI Помощник
+                AI по делу
               </Button>
              </Link>
           </div>
@@ -116,7 +117,9 @@ export default async function CaseDetailPage({ params }: PageProps) {
                   <p className="text-xs font-medium uppercase text-zinc-500">Клиент</p>
                   <div className="flex items-center gap-2 text-sm">
                     <User className="h-4 w-4 text-zinc-400" />
-                    {caseData.client.name}
+                    <Link href={`/admin/clients/${caseData.clientId}`} className="font-medium hover:text-blue-600 transition-colors">
+                      {caseData.client.name}
+                    </Link>
                   </div>
                 </div>
                 <div className="space-y-1">
@@ -223,7 +226,7 @@ export default async function CaseDetailPage({ params }: PageProps) {
                           <p className="text-xs text-zinc-500 mt-0.5">{contract.type}</p>
                         </div>
                         <Badge variant="outline" className="text-[10px] shrink-0">
-                          {contract.status}
+                          {contractStatusLabel(contract.status)}
                         </Badge>
                       </div>
                     </li>

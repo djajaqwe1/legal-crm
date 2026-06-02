@@ -27,7 +27,7 @@ import {
 } from "@/components/ui/table";
 import { getCases, getClients } from "@/lib/crm-repository";
 import { statusColorMap } from "@/lib/crm-data";
-import { Search, Filter as FilterIcon, MoreHorizontal, MessageSquare, ExternalLink } from "lucide-react";
+import { Search, Filter as FilterIcon, MessageSquare, ExternalLink } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { VoiceCreateButton } from "@/components/crm/voice-create-button";
@@ -60,7 +60,7 @@ export default async function CasesPage({ searchParams }: PageProps) {
     <CrmShell pageContext={`Реестр дел. Всего дел: ${allCases.length}, активных: ${allCases.filter(c => c.status !== "Завершено").length}.`}>
       <header className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div className="space-y-1">
-          <p className="text-sm font-medium text-zinc-500 uppercase tracking-wider">MVP / Контроль дел</p>
+          <p className="text-sm font-medium text-zinc-500 uppercase tracking-wider">Реестр дел</p>
           <h2 className="text-3xl font-bold tracking-tight text-zinc-900 dark:text-zinc-100">Реестр дел</h2>
         </div>
         <CreateCaseForm
@@ -186,13 +186,15 @@ export default async function CasesPage({ searchParams }: PageProps) {
                     <TableCell className="text-right">
                       <div className="flex justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                         <Link href={`/admin/cases/${item.id}/assistant`}>
-                          <Button variant="ghost" size="icon" className="h-8 w-8 text-blue-600 hover:text-blue-700 hover:bg-blue-50">
+                          <Button variant="ghost" size="icon" className="h-8 w-8 text-blue-600 hover:text-blue-700 hover:bg-blue-50" title="AI по делу">
                             <MessageSquare className="h-4 w-4" />
                           </Button>
                         </Link>
-                        <Button variant="ghost" size="icon" className="h-8 w-8">
-                          <MoreHorizontal className="h-4 w-4" />
-                        </Button>
+                        <Link href={`/admin/cases/${item.id}`}>
+                          <Button variant="ghost" size="icon" className="h-8 w-8" title="Открыть карточку">
+                            <ExternalLink className="h-4 w-4" />
+                          </Button>
+                        </Link>
                       </div>
                     </TableCell>
                   </TableRow>

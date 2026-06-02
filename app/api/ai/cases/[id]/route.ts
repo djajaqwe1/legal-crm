@@ -21,7 +21,7 @@ export async function GET(request: Request, { params }: Params) {
       where: { id, workspaceId: wid },
     });
     if (!k) {
-      return NextResponse.json({ error: "Case not found." }, { status: 404 });
+      return NextResponse.json({ error: "Дело не найдено" }, { status: 404 });
     }
     const messages = await prisma.chatMessage.findMany({
       where: { legalCaseId: id, contextType: "case", workspaceId: wid },
@@ -38,7 +38,7 @@ export async function POST(request: Request, { params }: Params) {
   try {
     const wid = await resolveWorkspaceId();
     if (!wid) {
-      return NextResponse.json({ error: "Workspace not configured." }, { status: 503 });
+      return NextResponse.json({ error: "Workspace не настроен" }, { status: 503 });
     }
 
     if (!process.env.GEMINI_API_KEY) {
@@ -50,7 +50,7 @@ export async function POST(request: Request, { params }: Params) {
 
     if (!body.message?.trim()) {
       return NextResponse.json(
-        { error: "Message is required." },
+        { error: "Введите сообщение" },
         { status: 400 },
       );
     }

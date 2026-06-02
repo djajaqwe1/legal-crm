@@ -143,7 +143,7 @@ ${comment ? `Комментарий юриста: ${comment}` : ""}`;
         code,
         title: parsed.caseTitle?.trim() || `Дело ${clientName}`,
         kind,
-        status: ruToCaseStatus[parsed.status ?? ""] ?? CaseStatus.CLOSED,
+        status: ruToCaseStatus[parsed.status ?? ""] ?? CaseStatus.IN_PROGRESS,
         description: (parsed.description ?? comment) || null,
         expectedAmount: parsed.expectedAmount ?? undefined,
         paidAmount: parsed.paidAmount ?? undefined,

@@ -7,6 +7,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Plus, CheckCircle2, FileText, Loader2, Upload, Download, Trash2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { Check } from "lucide-react";
+import { documentStorageHint, isDownloadableDocument } from "@/lib/document-utils";
 
 type Task = {
   id: string;
@@ -23,14 +24,21 @@ type Document = {
 };
 
 export function DocumentItem({ doc }: { doc: Document }) {
-  const isLocal = doc.path.startsWith("/uploads/");
+  const downloadable = isDownloadableDocument(doc.path);
+  const hint = documentStorageHint(doc.path);
+
   return (
-    <div className="flex items-center justify-between rounded-lg border border-zinc-100 p-3 hover:bg-zinc-50 transition-colors">
+    <div className="flex items-center justify-between rounded-lg border border-zinc-100 p-3 hover:bg-zinc-50 transition-colors dark:border-zinc-800 dark:hover:bg-zinc-900/50">
       <div className="flex items-center gap-3 min-w-0">
         <FileText className="h-4 w-4 text-zinc-400 shrink-0" />
-        <p className="text-sm font-medium truncate">{doc.name}</p>
+        <div className="min-w-0">
+          <p className="text-sm font-medium truncate">{doc.name}</p>
+          {hint && !downloadable && (
+            <p className="text-[10px] text-zinc-400">{hint}</p>
+          )}
+        </div>
       </div>
-      {isLocal && (
+      {downloadable && (
         <a
           href={doc.path}
           target="_blank"
