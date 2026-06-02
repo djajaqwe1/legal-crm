@@ -33,7 +33,7 @@ const integrationItems = [
   { label: "База Әділет", href: "/admin/integration/adilet", icon: BookOpen },
 ];
 
-export function CrmSidebar() {
+export function CrmSidebar({ onNavigate }: { onNavigate?: () => void } = {}) {
   const pathname = usePathname();
   const router = useRouter();
   const [dbOnline, setDbOnline] = useState<boolean | null>(null);
@@ -77,6 +77,7 @@ export function CrmSidebar() {
                   <Link
                     key={item.href}
                     href={item.href}
+                    onClick={() => onNavigate?.()}
                     className={`flex items-center gap-3 w-full rounded-lg px-3 py-2.5 text-sm font-medium transition-all ${
                       isJarvis
                         ? isActive
@@ -113,6 +114,7 @@ export function CrmSidebar() {
                   <Link
                     key={item.href}
                     href={item.href}
+                    onClick={() => onNavigate?.()}
                     className={`flex items-center gap-3 w-full rounded-lg px-3 py-2.5 text-sm font-medium transition-all ${
                       isActive
                         ? "bg-zinc-900 text-white shadow-md shadow-zinc-200 dark:bg-zinc-100 dark:text-zinc-900 dark:shadow-none"

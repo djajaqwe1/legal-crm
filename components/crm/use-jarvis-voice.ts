@@ -36,17 +36,6 @@ export function useJarvisVoice({ onTranscript }: Options) {
   const onTranscriptRef = useRef(onTranscript);
   onTranscriptRef.current = onTranscript;
 
-  const speak = useCallback((text: string) => {
-    if (typeof window === "undefined" || !window.speechSynthesis) return;
-    window.speechSynthesis.cancel();
-    const clean = text.replace(/\n+/g, " ").slice(0, 350);
-    if (!clean.trim()) return;
-    const utter = new SpeechSynthesisUtterance(clean);
-    utter.lang = "ru-RU";
-    utter.rate = 1.05;
-    window.speechSynthesis.speak(utter);
-  }, []);
-
   const stopListening = useCallback(() => {
     recognitionRef.current?.stop();
     recognitionRef.current = null;
@@ -58,7 +47,7 @@ export function useJarvisVoice({ onTranscript }: Options) {
     const w = window as WindowWithSpeech;
     const SR = w.SpeechRecognition ?? w.webkitSpeechRecognition;
     if (!SR) {
-      alert("Голос работает в Chrome или Edge.");
+      alert("Голосовой ввод доступен в Chrome или Edge.");
       return;
     }
 
@@ -103,7 +92,7 @@ export function useJarvisVoice({ onTranscript }: Options) {
     else startListening();
   }, [isListening, startListening, stopListening]);
 
-  return { isListening, interim, speak, startListening, stopListening, toggleListening };
+  return { isListening, interim, toggleListening, startListening, stopListening };
 }
 
 export function isVoiceConfirm(text: string): boolean {

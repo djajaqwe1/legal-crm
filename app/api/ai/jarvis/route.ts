@@ -1,10 +1,15 @@
 import { NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
 import { resolveWorkspaceId } from "@/lib/workspace-scope";
 import { formatGeminiUserError } from "@/lib/gemini-models";
 import { buildJarvisSystemPrompt, buildWorkspaceSnapshot } from "@/lib/jarvis/context";
 import { runJarvisAgent, executeConfirmedAction } from "@/lib/jarvis/agent";
 import { VOICE_CONFIRM_RE } from "@/lib/jarvis/types";
+import {
+  appendJarvisMessages,
+  autoTitleSession,
+  createJarvisSession,
+  getJarvisSession,
+} from "@/lib/jarvis/sessions";
 
 export const dynamic = "force-dynamic";
 
@@ -38,6 +43,7 @@ export async function POST(req: Request) {
     }
 
     let body: {
+      sessionId?: string;
       messages?: Array<{ role: "user" | "assistant"; content: string }>;
       confirmed?: boolean;
       pendingAction?: { toolName: string; args: Record<string, unknown> };
@@ -50,7 +56,18 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Неверный формат запроса" }, { status: 400 });
     }
 
-    const { messages, confirmed, pendingAction, pageContext } = body;
+    const { sessionId: rawSessionId, messages, confirmed, pendingAction, pageContext } = body;
+
+    let sessionId = rawSessionId;
+    if (!sessionId) {
+      const created = await createJarvisSession(wid, "Боковой ассистент");
+      sessionId = created.id;
+    }
+
+    const session = await getJarvisSession(wid, sessionId);
+    if (!session) {
+      return NextResponse.json({ error: "Сессия не найдена" }, { status: 404 });
+    }
 
     if (!Array.isArray(messages) || messages.length === 0) {
       return NextResponse.json({ error: "Сообщения не переданы" }, { status: 400 });
@@ -66,19 +83,27 @@ export async function POST(req: Request) {
       Boolean(pendingAction) &&
       (confirmed || VOICE_CONFIRM_RE.test(lastText));
 
+    const isFirstUserMessage = session.messages.filter(m => m.role === "user").length === 0;
+
     if (voiceConfirmed && pendingAction) {
       const result = await executeConfirmedAction(wid, pendingAction.toolName, pendingAction.args ?? {});
-      if (!result.steps[0]?.success) {
-        return NextResponse.json({
-          reply: `Не удалось: ${result.reply}`,
-          steps: result.steps,
-          actions: result.actions,
-          needsConfirmation: false,
-        });
-      }
-      void saveChat(wid, lastText, result.reply);
+      const reply = result.steps[0]?.success ? result.reply : `Не удалось: ${result.reply}`;
+
+      await appendJarvisMessages(sessionId, [
+        { role: "user", content: lastText },
+        {
+          role: "assistant",
+          content: reply,
+          metadata: {
+            toolUsed: result.toolUsed,
+            toolResult: result.toolResult,
+            steps: result.steps,
+          },
+        },
+      ]);
+
       return NextResponse.json({
-        reply: result.reply,
+        reply,
         toolUsed: result.toolUsed,
         toolResult: result.toolResult,
         steps: result.steps,
@@ -99,7 +124,23 @@ export async function POST(req: Request) {
 
     const result = await runJarvisAgent(wid, systemPrompt, history, lastText);
 
-    void saveChat(wid, lastText, result.reply);
+    await appendJarvisMessages(sessionId, [
+      { role: "user", content: lastText },
+      {
+        role: "assistant",
+        content: result.reply,
+        metadata: {
+          toolUsed: result.toolUsed,
+          toolResult: result.toolResult,
+          steps: result.steps,
+          needsConfirmation: result.needsConfirmation,
+        },
+      },
+    ]);
+
+    if (isFirstUserMessage && session.title === "Новый чат") {
+      void autoTitleSession(sessionId, lastText);
+    }
 
     return NextResponse.json({
       reply: result.reply,
@@ -109,24 +150,13 @@ export async function POST(req: Request) {
       actions: result.actions,
       pendingAction: result.pendingAction,
       needsConfirmation: result.needsConfirmation,
+      sessionTitle: isFirstUserMessage ? lastText.slice(0, 48) : undefined,
+      sessionId,
     });
   } catch (error: unknown) {
     const msg = error instanceof Error ? error.message : "Server error";
     const userMessage = formatGeminiUserError(msg);
     const status = msg.includes("429") || msg.includes("RESOURCE_EXHAUSTED") ? 429 : 503;
     return NextResponse.json({ error: userMessage }, { status });
-  }
-}
-
-async function saveChat(workspaceId: string, userContent: string, assistantContent: string) {
-  try {
-    await prisma.chatMessage.createMany({
-      data: [
-        { workspaceId, role: "user", content: userContent },
-        { workspaceId, role: "assistant", content: assistantContent },
-      ],
-    });
-  } catch {
-    // ignore
   }
 }

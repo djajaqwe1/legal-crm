@@ -23,6 +23,7 @@ model Workspace {
   legalCases   LegalCase[]
   contracts    Contract[]
   chatMessages ChatMessage[]
+  jarvisSessions JarvisSession[]
 }
 
 model Client {
@@ -160,4 +161,32 @@ enum ContractStatus {
   SIGNED
   EXPIRING
   ARCHIVED
+}
+
+/// Сессия чата Джарвис (история как в ChatGPT).
+model JarvisSession {
+  id          String          @id @default(cuid())
+  workspaceId String
+  title       String          @default("Новый чат")
+  pinned      Boolean         @default(false)
+  project     String?
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+  messages    JarvisMessage[]
+  workspace   Workspace       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId, updatedAt])
+  @@index([workspaceId, pinned])
+}
+
+model JarvisMessage {
+  id        String        @id @default(cuid())
+  sessionId String
+  role      String
+  content   String        @db.Text
+  metadata  Json?
+  createdAt DateTime      @default(now())
+  session   JarvisSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@index([sessionId, createdAt])
 }
