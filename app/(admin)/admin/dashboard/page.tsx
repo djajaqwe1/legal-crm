@@ -141,13 +141,17 @@ export default async function Home() {
         <Link href="/admin/contracts?status=EXPIRING" className="inline-flex items-center gap-1.5 rounded-full border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-900/20 px-4 py-2 text-xs font-medium text-amber-700 dark:text-amber-300 hover:bg-amber-100 transition-colors">
           ⚠ Договоры истекают
         </Link>
+        <Link href="/admin/finance" className="inline-flex items-center gap-1.5 rounded-full border border-emerald-200 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-900/20 px-4 py-2 text-xs font-medium text-emerald-700 dark:text-emerald-300 hover:bg-emerald-100 transition-colors">
+          💰 Финансы
+        </Link>
         <Link href="/admin/clients" className="inline-flex items-center gap-1.5 rounded-full border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-4 py-2 text-xs font-medium text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors">
           👥 Все клиенты
         </Link>
       </div>
 
       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4 mb-8">
-        <Card className="border-zinc-200 shadow-sm hover:shadow-md transition-shadow">
+        <Link href="/admin/cases" className="block group">
+        <Card className="border-zinc-200 shadow-sm hover:shadow-md transition-shadow group-hover:border-blue-200 dark:group-hover:border-blue-900">
           <CardContent className="pt-6">
             <div className="flex items-center justify-between">
               <div className="space-y-1">
@@ -168,8 +172,10 @@ export default async function Home() {
             </div>
           </CardContent>
         </Card>
+        </Link>
 
-        <Card className="border-zinc-200 shadow-sm hover:shadow-md transition-shadow">
+        <Link href="/admin/clients" className="block group">
+        <Card className="border-zinc-200 shadow-sm hover:shadow-md transition-shadow group-hover:border-green-200 dark:group-hover:border-green-900">
           <CardContent className="pt-6">
             <div className="flex items-center justify-between">
               <div className="space-y-1">
@@ -184,8 +190,10 @@ export default async function Home() {
             </div>
           </CardContent>
         </Card>
+        </Link>
 
-        <Card className="border-zinc-200 shadow-sm hover:shadow-md transition-shadow">
+        <Link href="/admin/contracts" className="block group">
+        <Card className="border-zinc-200 shadow-sm hover:shadow-md transition-shadow group-hover:border-purple-200 dark:group-hover:border-purple-900">
           <CardContent className="pt-6">
             <div className="flex items-center justify-between">
               <div className="space-y-1">
@@ -200,8 +208,10 @@ export default async function Home() {
             </div>
           </CardContent>
         </Card>
+        </Link>
 
-        <Card className="border-zinc-200 shadow-sm hover:shadow-md transition-shadow">
+        <Link href="/admin/cases?status=В работе" className="block group">
+        <Card className="border-zinc-200 shadow-sm hover:shadow-md transition-shadow group-hover:border-orange-200 dark:group-hover:border-orange-900">
           <CardContent className="pt-6">
             <div className="flex items-center justify-between">
               <div className="space-y-1">
@@ -216,6 +226,7 @@ export default async function Home() {
             </div>
           </CardContent>
         </Card>
+        </Link>
       </div>
 
       {/* Status breakdown bar chart */}

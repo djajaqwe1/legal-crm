@@ -11,30 +11,35 @@ import {
 } from "@/components/ui/table";
 import { getClients } from "@/lib/crm-repository";
 
-type PageProps = { searchParams: Promise<{ q?: string }> };
+import { CLIENT_CATEGORY_LABELS } from "@/lib/case-tree";
+
+type PageProps = { searchParams: Promise<{ q?: string; category?: string }> };
 import { CreateObjectDialog } from "@/components/crm/create-object-dialog";
 import { portalAccessFromClient, portalAccessLabel } from "@/lib/portal-client-status";
 import { Badge } from "@/components/ui/badge";
 import Link from "next/link";
 
-import { Phone, MessageSquare, ChevronRight, Home, Users as UsersIcon, Search } from "lucide-react";
+import { Search, ChevronRight, Home, Users as UsersIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
 export default async function ClientsPage({ searchParams }: PageProps) {
-  const { q } = await searchParams;
+  const { q, category } = await searchParams;
   const query = (q ?? "").trim().toLowerCase();
+  const categoryFilter = category === "INDIVIDUAL" || category === "LEGAL_ENTITY" ? category : null;
   const allClients = await getClients();
 
-  const clients = query
-    ? allClients.filter(
-        (c) =>
-          c.name.toLowerCase().includes(query) ||
-          (c.phone ?? "").toLowerCase().includes(query) ||
-          (c.email ?? "").toLowerCase().includes(query) ||
-          c.manager.toLowerCase().includes(query),
-      )
-    : allClients;
+  const clients = allClients.filter((c) => {
+    const cat = "category" in c ? (c as { category?: string }).category : undefined;
+    if (categoryFilter && cat !== categoryFilter) return false;
+    if (!query) return true;
+    return (
+      c.name.toLowerCase().includes(query) ||
+      (c.phone ?? "").toLowerCase().includes(query) ||
+      (c.email ?? "").toLowerCase().includes(query) ||
+      c.manager.toLowerCase().includes(query)
+    );
+  });
 
   return (
     <CrmShell pageContext={`Клиентская база. Всего клиентов: ${allClients.length}.`}>
@@ -54,7 +59,7 @@ export default async function ClientsPage({ searchParams }: PageProps) {
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div className="flex flex-col gap-1">
             <h2 className="text-3xl font-bold tracking-tight text-zinc-900 dark:text-zinc-100">Клиентская база</h2>
-            <p className="text-sm text-zinc-500">Управление контактами и историей взаимодействия</p>
+            <p className="text-sm text-zinc-500">Физлица и юрлица — структура как папки на OneDrive</p>
           </div>
           <CreateClientForm />
         </div>
@@ -85,9 +90,32 @@ export default async function ClientsPage({ searchParams }: PageProps) {
           )}
         </div>
       </form>
-      {query && (
+
+      <div className="flex flex-wrap gap-2 mb-4">
+        {[
+          { href: "/admin/clients", label: "Все" },
+          { href: "/admin/clients?category=INDIVIDUAL", label: "Физлица" },
+          { href: "/admin/clients?category=LEGAL_ENTITY", label: "Юрлица" },
+        ].map(tab => (
+          <Link
+            key={tab.href}
+            href={tab.href}
+            className={`rounded-full px-3 py-1 text-xs font-medium border transition-colors ${
+              (tab.href.includes("category=") ? categoryFilter === tab.href.split("=")[1] : !categoryFilter)
+                ? "bg-zinc-900 text-white border-zinc-900 dark:bg-zinc-100 dark:text-zinc-900"
+                : "border-zinc-200 text-zinc-600 hover:bg-zinc-50 dark:border-zinc-700"
+            }`}
+          >
+            {tab.label}
+          </Link>
+        ))}
+      </div>
+
+      {(query || categoryFilter) && (
         <p className="text-sm text-zinc-500 mb-4">
-          По запросу «{q}» найдено клиентов: <strong>{clients.length}</strong>
+          Найдено клиентов: <strong>{clients.length}</strong>
+          {query ? ` · запрос «${q}»` : ""}
+          {categoryFilter ? ` · ${CLIENT_CATEGORY_LABELS[categoryFilter as keyof typeof CLIENT_CATEGORY_LABELS]}` : ""}
         </p>
       )}
 
@@ -100,12 +128,12 @@ export default async function ClientsPage({ searchParams }: PageProps) {
             <TableHeader>
               <TableRow>
                 <TableHead>Название / Контакты</TableHead>
+                <TableHead>Тип</TableHead>
                 <TableHead>Менеджер</TableHead>
                 <TableHead className="whitespace-nowrap">ЛК клиента</TableHead>
                 <TableHead className="text-right">Объекты</TableHead>
                 <TableHead className="text-right">Активных дел</TableHead>
                 <TableHead className="text-right">Дата создания</TableHead>
-                <TableHead className="text-right">Действия</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -126,6 +154,9 @@ export default async function ClientsPage({ searchParams }: PageProps) {
                       ? (client as { portalPasswordHash: string | null }).portalPasswordHash
                       : null,
                 });
+                const cat = "category" in client
+                  ? CLIENT_CATEGORY_LABELS[(client as { category: keyof typeof CLIENT_CATEGORY_LABELS }).category] ?? "—"
+                  : "—";
                 return (
                 <TableRow key={client.id}>
                   <TableCell>
@@ -136,14 +167,14 @@ export default async function ClientsPage({ searchParams }: PageProps) {
                       >
                         {client.name}
                       </Link>
-                      <div className="flex items-center gap-2 mt-1 text-xs text-zinc-500">
-                        <Phone className="h-3 w-3" />
-                        <span>{client.phone || "Нет телефона"}</span>
-                      </div>
+                      <p className="mt-1 text-xs text-zinc-500">{client.phone || "Телефон не указан"}</p>
                       {client.email ? (
-                        <div className="mt-0.5 text-xs text-zinc-500">{client.email}</div>
+                        <p className="mt-0.5 text-xs text-zinc-500">{client.email}</p>
                       ) : null}
                     </div>
+                  </TableCell>
+                  <TableCell>
+                    <Badge variant="outline" className="text-[10px]">{cat}</Badge>
                   </TableCell>
                   <TableCell>{client.manager}</TableCell>
                   <TableCell>
@@ -171,19 +202,9 @@ export default async function ClientsPage({ searchParams }: PageProps) {
                   </TableCell>
                   <TableCell className="text-right">{client._count.cases}</TableCell>
                   <TableCell className="text-right">
-                    {client.createdAt 
-                      ? new Date(client.createdAt).toLocaleDateString("ru-RU") 
+                    {client.createdAt
+                      ? new Date(client.createdAt).toLocaleDateString("ru-RU")
                       : "—"}
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <div className="flex justify-end gap-2">
-                      <Button variant="outline" size="icon" className="h-8 w-8" title="Позвонить">
-                        <Phone className="h-4 w-4" />
-                      </Button>
-                      <Button variant="outline" size="icon" className="h-8 w-8" title="Написать">
-                        <MessageSquare className="h-4 w-4" />
-                      </Button>
-                    </div>
                   </TableCell>
                 </TableRow>
                 );

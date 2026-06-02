@@ -13,6 +13,7 @@ export function CreateClientForm() {
   const [manager, setManager] = useState("");
   const [phone, setPhone] = useState("");
   const [email, setEmail] = useState("");
+  const [category, setCategory] = useState<"INDIVIDUAL" | "LEGAL_ENTITY">("LEGAL_ENTITY");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isOpen, setIsOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -27,7 +28,7 @@ export function CreateClientForm() {
       const response = await fetch("/api/clients", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, manager, phone, email }),
+        body: JSON.stringify({ name, manager, phone, email, category }),
       });
 
       if (!response.ok) {
@@ -93,6 +94,18 @@ export function CreateClientForm() {
                 placeholder="client@example.kz"
               />
             </div>
+          </div>
+
+          <div className="space-y-2">
+            <label className="text-xs font-bold uppercase text-zinc-500">Тип клиента</label>
+            <select
+              value={category}
+              onChange={e => setCategory(e.target.value as "INDIVIDUAL" | "LEGAL_ENTITY")}
+              className="w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
+            >
+              <option value="LEGAL_ENTITY">Юрлицо</option>
+              <option value="INDIVIDUAL">Физлицо</option>
+            </select>
           </div>
 
           <div className="space-y-2">

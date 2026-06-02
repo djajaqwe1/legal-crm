@@ -15,6 +15,7 @@ import {
   LogOut,
   ExternalLink,
   Bot,
+  Wallet,
 } from "lucide-react";
 import { ThemeToggle } from "@/components/crm/theme-toggle";
 
@@ -23,6 +24,7 @@ const navItems = [
   { label: "Дашборд", href: "/admin/dashboard", icon: LayoutDashboard },
   { label: "Клиенты", href: "/admin/clients", icon: Users },
   { label: "Реестр дел", href: "/admin/cases", icon: Briefcase },
+  { label: "Финансы", href: "/admin/finance", icon: Wallet },
   { label: "Договоры", href: "/admin/contracts", icon: FileText },
   { label: "Конструктор документов", href: "/admin/documents-builder", icon: Wand2 },
   { label: "Агент-Стратег", href: "/admin/strategist", icon: Compass },

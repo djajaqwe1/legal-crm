@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { CrmShell } from "@/components/crm/shell";
 import { CreateObjectDialog } from "@/components/crm/create-object-dialog";
+import { ClientCaseTree, ClientCaseTreeLegend } from "@/components/crm/client-case-tree";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Table,
@@ -13,8 +14,8 @@ import {
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { getClientById } from "@/lib/crm-repository";
-import { caseStatusToRu } from "@/lib/case-status";
-import { statusColorMap } from "@/lib/crm-data";
+import { buildCaseTree } from "@/lib/case-tree";
+import { CLIENT_CATEGORY_LABELS } from "@/lib/case-tree";
 import { portalAccessFromClient, portalAccessLabel } from "@/lib/portal-client-status";
 import { EditClientForm } from "@/components/crm/edit-client-form";
 import {
@@ -24,7 +25,6 @@ import {
   Phone,
   Building2,
   Briefcase,
-  ExternalLink,
   Mail,
 } from "lucide-react";
 
@@ -45,22 +45,19 @@ export default async function ClientDetailPage({ params }: PageProps) {
     portalPasswordHash: client.portalPasswordHash,
   });
 
+  const caseTree = buildCaseTree(client.cases);
+  const categoryLabel = CLIENT_CATEGORY_LABELS[client.category] ?? "Клиент";
+
   return (
-    <CrmShell pageContext={`Детали клиента: ${client.name}. Телефон: ${client.phone ?? "не указан"}. Дел: ${client.cases?.length ?? 0}.`}>
+    <CrmShell pageContext={`Клиент: ${client.name}. Дел: ${client.cases.length}.`}>
       <header className="space-y-4 mb-8">
         <nav className="flex flex-wrap items-center gap-2 text-xs font-medium text-zinc-500 uppercase tracking-wider">
-          <Link
-            href="/admin/dashboard"
-            className="hover:text-zinc-900 transition-colors flex items-center gap-1"
-          >
+          <Link href="/admin/dashboard" className="hover:text-zinc-900 transition-colors flex items-center gap-1">
             <Home className="h-3 w-3" />
             Дашборд
           </Link>
           <ChevronRight className="h-3 w-3" />
-          <Link
-            href="/admin/clients"
-            className="hover:text-zinc-900 transition-colors flex items-center gap-1"
-          >
+          <Link href="/admin/clients" className="hover:text-zinc-900 transition-colors flex items-center gap-1">
             <Users className="h-3 w-3" />
             Клиенты
           </Link>
@@ -70,10 +67,16 @@ export default async function ClientDetailPage({ params }: PageProps) {
 
         <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div>
+            <div className="flex items-center gap-2 mb-1">
+              <Badge variant="outline" className="text-[10px]">{categoryLabel}</Badge>
+              {client.folderGroup && (
+                <Badge variant="secondary" className="text-[10px]">{client.folderGroup}</Badge>
+              )}
+            </div>
             <h2 className="text-3xl font-bold tracking-tight text-zinc-900 dark:text-zinc-100">
               {client.name}
             </h2>
-            <p className="mt-1 text-sm text-zinc-500">Карточка клиента и связанные объекты и дела</p>
+            <p className="mt-1 text-sm text-zinc-500">Папка клиента: объекты и дерево дел</p>
           </div>
           <CreateObjectDialog clientId={client.id} clientLabel={client.name} />
         </div>
@@ -81,67 +84,58 @@ export default async function ClientDetailPage({ params }: PageProps) {
 
       <div className="grid gap-6 lg:grid-cols-3">
         <div className="space-y-6 lg:col-span-1">
-        <Card className="border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-900">
-          <CardHeader>
-            <CardTitle className="text-lg">Контакты</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4 text-sm">
-            <div className="flex items-start gap-2">
-              <Phone className="mt-0.5 h-4 w-4 shrink-0 text-zinc-400" />
-              <div>
-                <p className="text-xs font-medium uppercase text-zinc-500">Телефон</p>
-                <p>{client.phone || "—"}</p>
+          <Card className="border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-900">
+            <CardHeader>
+              <CardTitle className="text-lg">Контакты</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4 text-sm">
+              <div className="flex items-start gap-2">
+                <Phone className="mt-0.5 h-4 w-4 shrink-0 text-zinc-400" />
+                <div>
+                  <p className="text-xs font-medium uppercase text-zinc-500">Телефон</p>
+                  <p>{client.phone || "—"}</p>
+                </div>
               </div>
-            </div>
-            <div className="flex items-start gap-2">
-              <Mail className="mt-0.5 h-4 w-4 shrink-0 text-zinc-400" />
-              <div>
-                <p className="text-xs font-medium uppercase text-zinc-500">Email</p>
-                <p>{client.email || "—"}</p>
+              <div className="flex items-start gap-2">
+                <Mail className="mt-0.5 h-4 w-4 shrink-0 text-zinc-400" />
+                <div>
+                  <p className="text-xs font-medium uppercase text-zinc-500">Email</p>
+                  <p>{client.email || "—"}</p>
+                </div>
               </div>
-            </div>
-            <div className="rounded-lg border border-zinc-100 bg-zinc-50 px-3 py-2 text-xs dark:border-zinc-800 dark:bg-zinc-900/60">
-              <p className="font-medium text-zinc-800 dark:text-zinc-200">{portalAccessLabel(portalAccess)}</p>
-              <p className="mt-1 text-zinc-600 dark:text-zinc-400">
-                Клиент заходит на{" "}
-                <Link href="/portal/login" className="font-medium text-blue-600 hover:underline">
-                  /portal/login
-                </Link>
-                — сессия отдельна от CRM.
-              </p>
-            </div>
-            <div>
-              <p className="text-xs font-medium uppercase text-zinc-500">Ответственный</p>
-              <p className="font-medium">{client.manager}</p>
-            </div>
-            <div className="flex gap-4 pt-2 text-xs text-zinc-500">
-              <span>
-                Объектов: <strong className="text-zinc-800 dark:text-zinc-200">{client.objects.length}</strong>
-              </span>
-              <span>
-                Дел: <strong className="text-zinc-800 dark:text-zinc-200">{client.cases.length}</strong>
-              </span>
-            </div>
-          </CardContent>
-        </Card>
+              <div className="rounded-lg border border-zinc-100 bg-zinc-50 px-3 py-2 text-xs dark:border-zinc-800 dark:bg-zinc-900/60">
+                <p className="font-medium text-zinc-800 dark:text-zinc-200">{portalAccessLabel(portalAccess)}</p>
+                <p className="mt-1 text-zinc-600 dark:text-zinc-400">
+                  ЛК:{" "}
+                  <Link href="/portal/login" className="font-medium text-blue-600 hover:underline">
+                    /portal/login
+                  </Link>
+                </p>
+              </div>
+              <div>
+                <p className="text-xs font-medium uppercase text-zinc-500">Ответственный</p>
+                <p className="font-medium">{client.manager}</p>
+              </div>
+            </CardContent>
+          </Card>
 
-        <Card className="border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-900">
-          <CardHeader>
-            <CardTitle className="text-lg">Редактирование</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <EditClientForm
-              client={{
-                id: client.id,
-                name: client.name,
-                manager: client.manager,
-                phone: client.phone ?? "",
-                email: client.email ?? "",
-                portalAccess,
-              }}
-            />
-          </CardContent>
-        </Card>
+          <Card className="border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-900">
+            <CardHeader>
+              <CardTitle className="text-lg">Редактирование</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <EditClientForm
+                client={{
+                  id: client.id,
+                  name: client.name,
+                  manager: client.manager,
+                  phone: client.phone ?? "",
+                  email: client.email ?? "",
+                  portalAccess,
+                }}
+              />
+            </CardContent>
+          </Card>
         </div>
 
         <div className="space-y-6 lg:col-span-2">
@@ -154,9 +148,7 @@ export default async function ClientDetailPage({ params }: PageProps) {
             </CardHeader>
             <CardContent className="p-0">
               {client.objects.length === 0 ? (
-                <p className="px-6 pb-6 text-sm text-zinc-500 italic">
-                  Объектов пока нет — добавьте первый кнопкой выше.
-                </p>
+                <p className="px-6 pb-6 text-sm text-zinc-500 italic">Объектов пока нет.</p>
               ) : (
                 <Table>
                   <TableHeader>
@@ -184,53 +176,11 @@ export default async function ClientDetailPage({ params }: PageProps) {
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-lg">
                 <Briefcase className="h-5 w-5 text-zinc-500" />
-                Дела клиента
+                Дела клиента (дерево)
               </CardTitle>
             </CardHeader>
-            <CardContent className="p-0">
-              {client.cases.length === 0 ? (
-                <p className="px-6 pb-6 text-sm text-zinc-500 italic">
-                  Дел пока нет — создайте из раздела «Реестр дел».
-                </p>
-              ) : (
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Код</TableHead>
-                      <TableHead>Название</TableHead>
-                      <TableHead className="hidden sm:table-cell">Объект</TableHead>
-                      <TableHead>Статус</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {client.cases.map((c) => (
-                      <TableRow key={c.id}>
-                        <TableCell className="font-mono text-xs text-zinc-500">{c.code}</TableCell>
-                        <TableCell>
-                          <Link
-                            href={`/admin/cases/${c.id}`}
-                            className="font-medium text-zinc-900 hover:text-blue-600 dark:text-zinc-100 inline-flex items-center gap-1"
-                          >
-                            {c.title}
-                            <ExternalLink className="h-3 w-3 opacity-60" />
-                          </Link>
-                        </TableCell>
-                        <TableCell className="hidden sm:table-cell text-sm text-zinc-500">
-                          {c.object?.name ?? "—"}
-                        </TableCell>
-                        <TableCell>
-                          <Badge
-                            className={`${statusColorMap[caseStatusToRu[c.status]] ?? statusColorMap["Новый"]} border-0 text-[10px]`}
-                          >
-                            {caseStatusToRu[c.status]}
-                          </Badge>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              )}
-            </CardContent>
+            <ClientCaseTreeLegend />
+            <ClientCaseTree roots={caseTree} />
           </Card>
         </div>
       </div>

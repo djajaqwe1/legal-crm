@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { ClientCategory } from "@/lib/generated-client";
 import { resolveWorkspaceId } from "@/lib/workspace-scope";
 import { normalizePortalEmail, isValidPortalEmail } from "@/lib/portal-email";
 
@@ -36,6 +37,7 @@ export async function POST(request: Request) {
       manager?: string;
       phone?: string;
       email?: string;
+      category?: "INDIVIDUAL" | "LEGAL_ENTITY";
     };
     if (!body.name || !body.manager) {
       return NextResponse.json(
@@ -57,6 +59,7 @@ export async function POST(request: Request) {
         manager: body.manager.trim(),
         phone: body.phone?.trim() || null,
         email: emailNorm,
+        category: body.category === "INDIVIDUAL" ? ClientCategory.INDIVIDUAL : ClientCategory.LEGAL_ENTITY,
       },
       omit: { portalPasswordHash: true },
     });
