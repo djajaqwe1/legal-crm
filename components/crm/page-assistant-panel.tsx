@@ -4,6 +4,7 @@ import { useState, useRef, useEffect, useCallback, startTransition } from "react
 import { Sparkles, X, Send, Mic, MicOff, Loader2, ChevronDown, CheckCircle, XCircle } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
 import { useRouter } from "next/navigation";
+import type { JarvisAction } from "@/lib/jarvis/types";
 
 type PendingAction = { toolName: string; args: Record<string, unknown> };
 
@@ -76,6 +77,7 @@ export function PageAssistantPanel({ pageContext }: Props) {
           messages: history.filter(m => m.id !== "init").map(m => ({ role: m.role, content: m.content })),
           confirmed,
           pendingAction: action ?? undefined,
+          pageContext,
         }),
       });
 
@@ -83,6 +85,7 @@ export function PageAssistantPanel({ pageContext }: Props) {
         reply?: string;
         error?: string;
         toolUsed?: string;
+        actions?: JarvisAction[];
         needsConfirmation?: boolean;
         pendingAction?: PendingAction;
       };
@@ -107,12 +110,19 @@ export function PageAssistantPanel({ pageContext }: Props) {
 
       setMessages(prev => [...prev, assistantMsg]);
 
+      if (data.actions?.length) {
+        for (const a of data.actions) {
+          if (a.type === "navigate") router.push(a.path);
+          if (a.type === "refresh") router.refresh();
+        }
+      }
+
       if (data.needsConfirmation && data.pendingAction) {
         setPendingAction(data.pendingAction);
       } else {
         setPendingAction(null);
         // Refresh page if a mutating action completed
-        if (data.toolUsed && ["create_case", "create_client", "update_case", "create_contract"].includes(data.toolUsed)) {
+        if (data.toolUsed && ["create_case", "create_client", "update_case", "create_contract", "add_task"].includes(data.toolUsed)) {
           router.refresh();
         }
       }
@@ -126,7 +136,7 @@ export function PageAssistantPanel({ pageContext }: Props) {
     } finally {
       setIsLoading(false);
     }
-  }, [messages, isLoading, router]);
+  }, [messages, isLoading, router, pageContext]);
 
   const handleConfirm = useCallback(async () => {
     if (!pendingAction || isLoading) return;

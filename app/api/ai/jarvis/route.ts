@@ -1,21 +1,15 @@
 import { NextResponse } from "next/server";
-import { GoogleGenerativeAI, SchemaType, type FunctionDeclaration } from "@google/generative-ai";
 import { prisma } from "@/lib/prisma";
 import { resolveWorkspaceId } from "@/lib/workspace-scope";
-import { ruToCaseStatus, caseStatusToRu } from "@/lib/case-status";
-import { CaseStatus, ContractStatus } from "@/lib/generated-client";
-import {
-  GEMINI_MODELS,
-  formatGeminiUserError,
-  isGeminiRetryableError,
-} from "@/lib/gemini-models";
+import { formatGeminiUserError } from "@/lib/gemini-models";
+import { buildJarvisSystemPrompt, buildWorkspaceSnapshot } from "@/lib/jarvis/context";
+import { runJarvisAgent, executeConfirmedAction } from "@/lib/jarvis/agent";
+import { VOICE_CONFIRM_RE } from "@/lib/jarvis/types";
 
 export const dynamic = "force-dynamic";
 
-const GEMINI_KEY = process.env.GEMINI_API_KEY ?? "";
-
-// Simple in-memory rate limiter: max 30 requests per minute per IP
 const rateLimitMap = new Map<string, { count: number; resetAt: number }>();
+
 function isRateLimited(ip: string): boolean {
   const now = Date.now();
   const entry = rateLimitMap.get(ip);
@@ -24,407 +18,14 @@ function isRateLimited(ip: string): boolean {
     return false;
   }
   entry.count++;
-  return entry.count > 30;
-}
-
-const SYSTEM_PROMPT = `Ты — Джарвис, умный AI-помощник для юридической фирмы ТОО «Конгломерат Алтай».
-Ты помогаешь юристу управлять делами, клиентами и договорами.
-Ты понимаешь голосовые команды на русском языке.
-Когда юрист просит создать, изменить или найти что-то — используй соответствующий инструмент.
-Перед выполнением действия (create/update/delete) ВСЕГДА сначала объясни что ты собираешься сделать,
-и спроси подтверждение. Отвечай на русском языке, кратко и по делу.`;
-
-// Tool declarations for Gemini
-const tools = [
-  {
-    name: "create_case",
-    description: "Создать новое дело. Вызывай только после получения подтверждения от юриста.",
-    parameters: {
-      type: SchemaType.OBJECT,
-      properties: {
-        title: { type: SchemaType.STRING, description: "Название/суть дела" },
-        clientName: { type: SchemaType.STRING, description: "Имя клиента" },
-        status: { type: SchemaType.STRING, enum: ["Новый", "В работе", "Суд", "Пауза", "Завершено"], description: "Статус дела" },
-        deadline: { type: SchemaType.STRING, description: "Дедлайн в формате YYYY-MM-DD или пустая строка" },
-        description: { type: SchemaType.STRING, description: "Описание дела" },
-      },
-      required: ["title", "clientName"],
-    },
-  },
-  {
-    name: "create_client",
-    description: "Создать нового клиента.",
-    parameters: {
-      type: SchemaType.OBJECT,
-      properties: {
-        name: { type: SchemaType.STRING, description: "ФИО или название организации" },
-        phone: { type: SchemaType.STRING, description: "Номер телефона" },
-        email: { type: SchemaType.STRING, description: "Email адрес" },
-      },
-      required: ["name"],
-    },
-  },
-  {
-    name: "update_case",
-    description: "Обновить поле существующего дела. Вызывай только после подтверждения.",
-    parameters: {
-      type: SchemaType.OBJECT,
-      properties: {
-        caseId: { type: SchemaType.STRING, description: "ID дела (получи через get_cases)" },
-        field: { type: SchemaType.STRING, enum: ["status", "description", "deadline", "title"], description: "Поле для обновления" },
-        value: { type: SchemaType.STRING, description: "Новое значение" },
-      },
-      required: ["caseId", "field", "value"],
-    },
-  },
-  {
-    name: "get_cases",
-    description: "Получить список дел с фильтрацией. Не требует подтверждения.",
-    parameters: {
-      type: SchemaType.OBJECT,
-      properties: {
-        status: { type: SchemaType.STRING, description: "Фильтр по статусу на русском: Новый | В работе | Суд | Пауза | Завершено" },
-        clientName: { type: SchemaType.STRING, description: "Фильтр по имени клиента" },
-        limit: { type: SchemaType.NUMBER, description: "Максимум записей, по умолчанию 5" },
-      },
-    },
-  },
-  {
-    name: "get_clients",
-    description: "Получить список клиентов. Не требует подтверждения.",
-    parameters: {
-      type: SchemaType.OBJECT,
-      properties: {
-        search: { type: SchemaType.STRING, description: "Поиск по имени" },
-        limit: { type: SchemaType.NUMBER, description: "Максимум записей, по умолчанию 5" },
-      },
-    },
-  },
-  {
-    name: "get_stats",
-    description: "Получить общую статистику по системе: количество дел, клиентов, договоров, просроченных дел.",
-    parameters: { type: SchemaType.OBJECT, properties: {} },
-  },
-  {
-    name: "create_contract",
-    description: "Создать договор для клиента. Вызывай только после подтверждения.",
-    parameters: {
-      type: SchemaType.OBJECT,
-      properties: {
-        number: { type: SchemaType.STRING, description: "Номер договора, например №001-2026" },
-        counterparty: { type: SchemaType.STRING, description: "Название контрагента/клиента" },
-        type: { type: SchemaType.STRING, description: "Тип договора" },
-        clientName: { type: SchemaType.STRING, description: "Имя клиента для привязки (опционально)" },
-      },
-      required: ["number", "counterparty"],
-    },
-  },
-  {
-    name: "generate_document",
-    description: "Сгенерировать юридический документ (иск, жалоба, заявление, ходатайство) на основе описания. Не требует подтверждения.",
-    parameters: {
-      type: SchemaType.OBJECT,
-      properties: {
-        type: { type: SchemaType.STRING, description: "Тип документа: иск | жалоба | заявление | ходатайство | претензия" },
-        description: { type: SchemaType.STRING, description: "Описание ситуации и что нужно написать" },
-        clientName: { type: SchemaType.STRING, description: "Имя клиента (опционально)" },
-      },
-      required: ["type", "description"],
-    },
-  },
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-] as any as FunctionDeclaration[];
-
-async function executeToolCall(
-  wid: string,
-  toolName: string,
-  args: Record<string, unknown>,
-): Promise<{ success: boolean; data?: unknown; message: string }> {
-  if (toolName === "get_stats") {
-    const [cases, clients, contracts, overdue] = await Promise.all([
-      prisma.legalCase.count({ where: { workspaceId: wid } }),
-      prisma.client.count({ where: { workspaceId: wid } }),
-      // Count ALL contracts in workspace (not just those linked to cases)
-      prisma.contract.count({ where: { workspaceId: wid } }),
-      prisma.legalCase.count({
-        where: {
-          workspaceId: wid,
-          deadline: { lt: new Date() },
-          status: { not: CaseStatus.CLOSED },
-        },
-      }),
-    ]);
-    return {
-      success: true,
-      data: { cases, clients, contracts, overdue },
-      message: `Дел: ${cases}, Клиентов: ${clients}, Договоров: ${contracts}, Просрочено: ${overdue}`,
-    };
-  }
-
-  if (toolName === "get_cases") {
-    const { status, clientName, limit = 5 } = args as { status?: string; clientName?: string; limit?: number };
-    // Properly map Russian status to enum
-    const statusEnum = status ? (ruToCaseStatus[status] ?? undefined) : undefined;
-    const cases = await prisma.legalCase.findMany({
-      where: {
-        workspaceId: wid,
-        ...(statusEnum ? { status: statusEnum } : {}),
-        ...(clientName ? { client: { name: { contains: clientName, mode: "insensitive" } } } : {}),
-      },
-      include: { client: true },
-      orderBy: { createdAt: "desc" },
-      take: typeof limit === "number" ? limit : 5,
-    });
-    return {
-      success: true,
-      data: cases.map(c => ({
-        id: c.id,
-        code: c.code,
-        title: c.title,
-        // Return Russian status labels, not raw enum
-        status: caseStatusToRu[c.status as CaseStatus] ?? c.status,
-        client: c.client?.name ?? "—",
-        deadline: c.deadline ? new Date(c.deadline).toLocaleDateString("ru-RU") : "Без срока",
-      })),
-      message: `Найдено ${cases.length} дел`,
-    };
-  }
-
-  if (toolName === "get_clients") {
-    const { search, limit = 5 } = args as { search?: string; limit?: number };
-    const clients = await prisma.client.findMany({
-      where: {
-        workspaceId: wid,
-        ...(search ? { name: { contains: search, mode: "insensitive" } } : {}),
-      },
-      orderBy: { createdAt: "desc" },
-      take: typeof limit === "number" ? limit : 5,
-    });
-    return {
-      success: true,
-      data: clients.map(c => ({ id: c.id, name: c.name, phone: c.phone, email: c.email })),
-      message: `Найдено ${clients.length} клиентов`,
-    };
-  }
-
-  if (toolName === "create_client") {
-    const { name, phone = "", email } = args as { name: string; phone?: string; email?: string };
-    // Check if client already exists
-    const existing = await prisma.client.findFirst({
-      where: { workspaceId: wid, name: { equals: name, mode: "insensitive" } },
-    });
-    if (existing) {
-      return { success: true, data: existing, message: `Клиент "${name}" уже существует` };
-    }
-    const generatedEmail = email ?? `client-${Date.now()}@crm.local`;
-    const client = await prisma.client.create({
-      data: { workspaceId: wid, name, phone, email: generatedEmail, manager: "Рустем Айкимбаев" },
-    });
-    return { success: true, data: { id: client.id, name: client.name }, message: `Клиент "${name}" создан` };
-  }
-
-  if (toolName === "create_case") {
-    const { title, clientName, status = "Новый", deadline, description } = args as {
-      title: string; clientName: string; status?: string; deadline?: string; description?: string;
-    };
-    // Use exact name match first, then fuzzy
-    let client = await prisma.client.findFirst({
-      where: { workspaceId: wid, name: { equals: clientName, mode: "insensitive" } },
-    });
-    if (!client) {
-      client = await prisma.client.findFirst({
-        where: { workspaceId: wid, name: { contains: clientName, mode: "insensitive" } },
-      });
-    }
-    if (!client) {
-      client = await prisma.client.create({
-        data: { workspaceId: wid, name: clientName, phone: "", email: `voice-${Date.now()}@crm.local`, manager: "Рустем Айкимбаев" },
-      });
-    }
-    const count = await prisma.legalCase.count({ where: { workspaceId: wid } });
-    const year = new Date().getFullYear();
-    const code = `LC-${year}-${String(count + 1).padStart(3, "0")}`;
-    const caseStatus: CaseStatus = ruToCaseStatus[status] ?? CaseStatus.NEW;
-    // Validate deadline
-    let deadlineDate: Date | null = null;
-    if (deadline && deadline.trim()) {
-      const parsed = new Date(deadline);
-      if (!isNaN(parsed.getTime())) deadlineDate = parsed;
-    }
-    const newCase = await prisma.legalCase.create({
-      data: {
-        workspaceId: wid,
-        clientId: client.id,
-        code,
-        title,
-        status: caseStatus,
-        description: description ?? null,
-        deadline: deadlineDate,
-      },
-    });
-    return { success: true, data: { id: newCase.id, code: newCase.code, title: newCase.title }, message: `Дело "${title}" (${code}) создано для клиента "${client.name}"` };
-  }
-
-  if (toolName === "update_case") {
-    const { caseId, field, value } = args as { caseId: string; field: string; value: string };
-    // Workspace scoping — prevent IDOR
-    const existingCase = await prisma.legalCase.findFirst({
-      where: { id: caseId, workspaceId: wid },
-    });
-    if (!existingCase) {
-      return { success: false, message: "Дело не найдено или недоступно" };
-    }
-    const updateData: Record<string, unknown> = {};
-    if (field === "status") {
-      const newStatus = ruToCaseStatus[value];
-      if (!newStatus) return { success: false, message: `Неизвестный статус: "${value}". Допустимые: Новый, В работе, Суд, Пауза, Завершено` };
-      updateData.status = newStatus;
-    } else if (field === "deadline") {
-      if (!value || !value.trim()) {
-        updateData.deadline = null;
-      } else {
-        const parsed = new Date(value);
-        if (isNaN(parsed.getTime())) return { success: false, message: `Неверный формат даты: "${value}"` };
-        updateData.deadline = parsed;
-      }
-    } else {
-      updateData[field] = value;
-    }
-    await prisma.legalCase.update({ where: { id: caseId }, data: updateData });
-    return { success: true, data: { id: caseId }, message: `Дело обновлено: ${field} → "${value}"` };
-  }
-
-  if (toolName === "create_contract") {
-    const { number, counterparty, type = "Оказание юридических услуг", clientName } = args as {
-      number: string; counterparty: string; type?: string; clientName?: string;
-    };
-    let clientId: string | null = null;
-    if (clientName) {
-      const client = await prisma.client.findFirst({
-        where: { workspaceId: wid, name: { contains: clientName, mode: "insensitive" } },
-      });
-      if (client) clientId = client.id;
-    }
-    // Check for duplicate number in workspace
-    const existing = await prisma.contract.findFirst({
-      where: { workspaceId: wid, number },
-    });
-    if (existing) {
-      return { success: false, message: `Договор с номером "${number}" уже существует` };
-    }
-    const contract = await prisma.contract.create({
-      data: {
-        workspaceId: wid,
-        number,
-        counterparty,
-        type,
-        clientId,
-        status: ContractStatus.DRAFT,
-      },
-    });
-    return {
-      success: true,
-      data: { id: contract.id, number: contract.number },
-      message: `Договор "${number}" с контрагентом "${counterparty}" создан`,
-    };
-  }
-
-  if (toolName === "generate_document") {
-    const { type, description, clientName } = args as {
-      type: string; description: string; clientName?: string;
-    };
-    const docPrompt = `Ты — опытный казахстанский юрист. Составь ${type} на русском языке.
-Ситуация: ${description}
-${clientName ? `Клиент: ${clientName}` : ""}
-
-Требования:
-- Используй официальный юридический язык Казахстана
-- Структурируй документ: шапка, основная часть, требования, подпись
-- Укажи все необходимые реквизиты с пометками [ЗАПОЛНИТЬ]
-- Ссылайся на актуальное законодательство РК (ГК РК, ГПК РК и т.д.)
-- Документ должен быть сразу готов к использованию
-
-Выведи только текст документа без вводных пояснений.`;
-
-    try {
-      const genAI = new GoogleGenerativeAI(GEMINI_KEY);
-      // Try models in order, pause briefly on quota errors
-      let docText = "";
-      for (const modelName of GEMINI_MODELS) {
-        try {
-          const model = genAI.getGenerativeModel({ model: modelName });
-          const result = await Promise.race([
-            model.generateContent(docPrompt),
-            new Promise<never>((_, reject) => setTimeout(() => reject(new Error("timeout")), 25000)),
-          ]);
-          docText = (result as Awaited<ReturnType<typeof model.generateContent>>).response.text();
-          if (docText) break;
-        } catch (e) {
-          const errMsg = e instanceof Error ? e.message : String(e);
-          if (errMsg.includes("429") || errMsg.includes("RESOURCE_EXHAUSTED")) {
-            await new Promise(r => setTimeout(r, 1500));
-          }
-          continue;
-        }
-      }
-      if (!docText) {
-        return { success: false, message: "Не удалось сгенерировать документ (превышен лимит или ошибка AI). Попробуйте через минуту." };
-      }
-      return {
-        success: true,
-        data: { type, text: docText, clientName },
-        message: `${type} сгенерирован`,
-      };
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : "";
-      if (msg.includes("429") || msg.includes("RESOURCE_EXHAUSTED")) {
-        return { success: false, message: "Превышен лимит AI. Подождите 1-2 минуты." };
-      }
-      return { success: false, message: "Ошибка генерации документа. Попробуйте позже." };
-    }
-  }
-
-  return { success: false, message: `Инструмент "${toolName}" не найден` };
-}
-
-async function callGeminiWithFallback(
-  systemInstruction: string,
-  history: Array<{ role: "user" | "model"; parts: Array<{ text: string }> }>,
-  lastMessage: string,
-) {
-  // Limit history to last 8 messages to reduce token usage
-  const trimmedHistory = history.slice(-8);
-
-  let lastError: Error | null = null;
-  for (const modelName of GEMINI_MODELS) {
-    try {
-      const genAI = new GoogleGenerativeAI(GEMINI_KEY);
-      const model = genAI.getGenerativeModel({
-        model: modelName,
-        systemInstruction,
-        tools: [{ functionDeclarations: tools }],
-      });
-      const chat = model.startChat({ history: trimmedHistory });
-      const result = await chat.sendMessage(lastMessage);
-      return { chat, result, response: result.response, modelUsed: modelName };
-    } catch (e) {
-      lastError = e instanceof Error ? e : new Error(String(e));
-      const msg = lastError.message;
-      if (!isGeminiRetryableError(msg)) throw lastError;
-      if (msg.includes("429") || msg.includes("RESOURCE_EXHAUSTED")) {
-        await new Promise(r => setTimeout(r, 1500));
-      }
-    }
-  }
-  throw lastError ?? new Error("All Gemini models failed");
+  return entry.count > 40;
 }
 
 export async function POST(req: Request) {
-  if (!GEMINI_KEY) {
+  if (!process.env.GEMINI_API_KEY) {
     return NextResponse.json({ error: "GEMINI_API_KEY не настроен на сервере" }, { status: 503 });
   }
 
-  // Rate limit by IP
   const ip = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? "unknown";
   if (isRateLimited(ip)) {
     return NextResponse.json({ error: "Слишком много запросов. Подождите минуту." }, { status: 429 });
@@ -436,131 +37,78 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Workspace not configured" }, { status: 503 });
     }
 
-    // Validate request body
     let body: {
       messages?: Array<{ role: "user" | "assistant"; content: string }>;
       confirmed?: boolean;
       pendingAction?: { toolName: string; args: Record<string, unknown> };
+      pageContext?: string;
     };
+
     try {
       body = await req.json();
     } catch {
       return NextResponse.json({ error: "Неверный формат запроса" }, { status: 400 });
     }
 
-    const { messages, confirmed, pendingAction } = body;
+    const { messages, confirmed, pendingAction, pageContext } = body;
 
     if (!Array.isArray(messages) || messages.length === 0) {
       return NextResponse.json({ error: "Сообщения не переданы" }, { status: 400 });
     }
 
-    // If user confirmed a pending action, execute it directly
-    if (confirmed && pendingAction) {
-      const result = await executeToolCall(wid, pendingAction.toolName, pendingAction.args ?? {});
-      if (!result.success) {
-        void prisma.chatMessage.create({
-          data: { workspaceId: wid, role: "assistant", content: `[TOOL_FAILED: ${pendingAction.toolName}] ${result.message}` },
-        }).catch(() => {});
-        return NextResponse.json({ reply: `Не удалось выполнить: ${result.message}`, needsConfirmation: false });
+    const lastMsg = messages[messages.length - 1];
+    if (!lastMsg || lastMsg.role !== "user") {
+      return NextResponse.json({ error: "Последнее сообщение должно быть от пользователя" }, { status: 400 });
+    }
+
+    const lastText = lastMsg.content?.trim() || " ";
+    const voiceConfirmed =
+      Boolean(pendingAction) &&
+      (confirmed || VOICE_CONFIRM_RE.test(lastText));
+
+    if (voiceConfirmed && pendingAction) {
+      const result = await executeConfirmedAction(wid, pendingAction.toolName, pendingAction.args ?? {});
+      if (!result.steps[0]?.success) {
+        return NextResponse.json({
+          reply: `Не удалось: ${result.reply}`,
+          steps: result.steps,
+          actions: result.actions,
+          needsConfirmation: false,
+        });
       }
+      void saveChat(wid, lastText, result.reply);
       return NextResponse.json({
-        reply: result.message,
-        toolUsed: pendingAction.toolName,
-        toolResult: result.data,
+        reply: result.reply,
+        toolUsed: result.toolUsed,
+        toolResult: result.toolResult,
+        steps: result.steps,
+        actions: result.actions,
         needsConfirmation: false,
       });
     }
 
-    // Gemini requires history to start with a 'user' message
+    const snapshot = await buildWorkspaceSnapshot(wid);
+    const systemPrompt = buildJarvisSystemPrompt(snapshot, pageContext);
+
     const rawHistory = messages.slice(0, -1).map(m => ({
-      role: m.role === "user" ? "user" as const : "model" as const,
+      role: m.role === "user" ? ("user" as const) : ("model" as const),
       parts: [{ text: m.content || " " }],
     }));
     const firstUserIdx = rawHistory.findIndex(m => m.role === "user");
     const history = firstUserIdx >= 0 ? rawHistory.slice(firstUserIdx) : [];
 
-    const lastMsg = messages[messages.length - 1];
-    if (!lastMsg || lastMsg.role !== "user") {
-      return NextResponse.json({ error: "Последнее сообщение должно быть от пользователя" }, { status: 400 });
-    }
-    const lastMessage = lastMsg.content?.trim() || " ";
+    const result = await runJarvisAgent(wid, systemPrompt, history, lastText);
 
-    const { chat, response } = await callGeminiWithFallback(SYSTEM_PROMPT, history, lastMessage);
-
-    // Check for function call
-    const functionCalls = response.functionCalls?.();
-    if (functionCalls && functionCalls.length > 0) {
-      const call = functionCalls[0];
-      const toolName = call.name;
-      const args = (call.args ?? {}) as Record<string, unknown>;
-
-      // Read-only or generative tools execute immediately without confirmation
-      if (toolName === "get_cases" || toolName === "get_clients" || toolName === "get_stats" || toolName === "generate_document") {
-        const toolResult = await executeToolCall(wid, toolName, args);
-        let followUpText = toolResult.message;
-        try {
-          const followUp = await chat.sendMessage([{
-            functionResponse: {
-              name: toolName,
-              response: { result: toolResult.data ?? toolResult.message },
-            },
-          }]);
-          followUpText = followUp.response.text() || followUpText;
-        } catch {
-          // If follow-up fails, use raw message
-        }
-        return NextResponse.json({
-          reply: followUpText,
-          toolUsed: toolName,
-          toolResult: toolResult.data,
-          needsConfirmation: false,
-        });
-      }
-
-      // Mutating tools need confirmation
-      let confirmText: string;
-      try {
-        confirmText = response.text();
-      } catch {
-        confirmText = "";
-      }
-      if (!confirmText) confirmText = generateConfirmText(toolName, args);
-
-      return NextResponse.json({
-        reply: confirmText,
-        toolUsed: toolName,
-        pendingAction: { toolName, args },
-        needsConfirmation: true,
-      });
-    }
-
-    let replyText: string;
-    try {
-      replyText = response.text();
-    } catch {
-      replyText = "Не удалось получить ответ. Попробуйте ещё раз.";
-    }
-
-    // Save chat to DB (fire-and-forget, doesn't block response)
-    void (async () => {
-      try {
-        const lastUserMsg = messages[messages.length - 1];
-        if (lastUserMsg?.role === "user") {
-          await prisma.chatMessage.createMany({
-            data: [
-              { workspaceId: wid, role: "user", content: lastUserMsg.content },
-              { workspaceId: wid, role: "assistant", content: replyText },
-            ],
-          });
-        }
-      } catch {
-        // Silently ignore DB save errors
-      }
-    })();
+    void saveChat(wid, lastText, result.reply);
 
     return NextResponse.json({
-      reply: replyText,
-      needsConfirmation: false,
+      reply: result.reply,
+      toolUsed: result.toolUsed,
+      toolResult: result.toolResult,
+      steps: result.steps,
+      actions: result.actions,
+      pendingAction: result.pendingAction,
+      needsConfirmation: result.needsConfirmation,
     });
   } catch (error: unknown) {
     const msg = error instanceof Error ? error.message : "Server error";
@@ -570,15 +118,15 @@ export async function POST(req: Request) {
   }
 }
 
-function generateConfirmText(toolName: string, args: Record<string, unknown>): string {
-  if (toolName === "create_case") {
-    return `Создать дело «${args.title}» для клиента «${args.clientName}»${args.status ? ` (статус: ${args.status})` : ""}? Разрешаете?`;
+async function saveChat(workspaceId: string, userContent: string, assistantContent: string) {
+  try {
+    await prisma.chatMessage.createMany({
+      data: [
+        { workspaceId, role: "user", content: userContent },
+        { workspaceId, role: "assistant", content: assistantContent },
+      ],
+    });
+  } catch {
+    // ignore
   }
-  if (toolName === "create_client") {
-    return `Создать нового клиента «${args.name}»${args.phone ? ` (тел: ${args.phone})` : ""}? Разрешаете?`;
-  }
-  if (toolName === "update_case") {
-    return `Обновить поле «${args.field}» → «${args.value}» в деле? Разрешаете?`;
-  }
-  return `Выполнить действие «${toolName}»? Разрешаете?`;
 }

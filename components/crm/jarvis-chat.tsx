@@ -1,11 +1,14 @@
 "use client";
 
 import { useState, useRef, useEffect, useCallback } from "react";
-import { Send, Mic, MicOff, Bot, User, CheckCircle, XCircle, Loader2, Sparkles } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { Send, Mic, MicOff, Bot, User, CheckCircle, XCircle, Loader2, Sparkles, Radio } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import Link from "next/link";
+import { useJarvisVoice, isVoiceConfirm } from "@/components/crm/use-jarvis-voice";
+import type { JarvisAction, JarvisStep } from "@/lib/jarvis/types";
 
 type ToolResult = Record<string, unknown> | unknown[] | null;
 
@@ -20,6 +23,7 @@ type Message = {
   needsConfirmation?: boolean;
   confirmed?: boolean;
   denied?: boolean;
+  steps?: JarvisStep[];
 };
 
 const TOOL_LABELS: Record<string, string> = {
@@ -27,10 +31,15 @@ const TOOL_LABELS: Record<string, string> = {
   create_client: "Создать клиента",
   create_contract: "Создать договор",
   update_case: "Обновить дело",
+  add_task: "Добавить задачу",
   get_cases: "Поиск дел",
-  get_clients: "Поиск клиентов",
+  get_clients: "Клиенты",
+  get_contracts: "Договоры",
+  get_overdue_cases: "Просроченные",
+  find_case: "Поиск дела",
+  navigate_to: "Навигация",
   get_stats: "Статистика",
-  generate_document: "Генерация документа",
+  generate_document: "Документ",
 };
 
 const TOOL_COLORS: Record<string, string> = {
@@ -160,35 +169,72 @@ function ResultCard({ toolName, data }: { toolName: string; data: ToolResult }) 
   return null;
 }
 
-export function JarvisChat() {
+export function JarvisChat({ pageContext }: { pageContext?: string } = {}) {
+  const router = useRouter();
   const [messages, setMessages] = useState<Message[]>([
     {
       id: "welcome",
       role: "assistant",
-      content: "Привет! Я Джарвис — ваш AI-помощник юриста. Могу создавать дела, клиентов и договоры, генерировать документы (иски, жалобы, заявления), искать информацию в базе. Говорите голосом или пишите — я помогу.",
+      content: "Джарвис на связи. Управляю CRM голосом или текстом: дела, клиенты, договоры, навигация, документы. Скажите «покажи статистику», «открой дела», «создай дело для Иванова» — или включите режим Jarvis для непрерывного голоса.",
     },
   ]);
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
-  const [isListening, setIsListening] = useState(false);
+  const [voiceMode, setVoiceMode] = useState(false);
   const [pendingAction, setPendingAction] = useState<{ toolName: string; args: Record<string, unknown> } | null>(null);
   const endRef = useRef<HTMLDivElement>(null);
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const recognitionRef = useRef<any>(null);
+  const pendingRef = useRef(pendingAction);
+  pendingRef.current = pendingAction;
+  const voiceModeRef = useRef(voiceMode);
+  voiceModeRef.current = voiceMode;
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  const sendMessage = useCallback(async (text: string, confirmed?: boolean, action?: typeof pendingAction) => {
+  const applyActions = useCallback((actions?: JarvisAction[]) => {
+    if (!actions?.length) return;
+    for (const action of actions) {
+      if (action.type === "navigate") router.push(action.path);
+      if (action.type === "refresh") router.refresh();
+    }
+  }, [router]);
+
+  const speakRef = useRef<(text: string) => void>(() => {});
+  const sendMessageRef = useRef<(
+    text: string,
+    confirmed?: boolean,
+    action?: { toolName: string; args: Record<string, unknown> } | null,
+    fromVoice?: boolean,
+  ) => Promise<void>>(async () => {});
+
+  const { isListening, interim, speak, toggleListening, startListening } = useJarvisVoice({
+    onTranscript: (text) => {
+      if (pendingRef.current && isVoiceConfirm(text)) {
+        void sendMessageRef.current(text, true, pendingRef.current, true);
+      } else {
+        void sendMessageRef.current(text, false, undefined, true);
+      }
+    },
+  });
+  speakRef.current = speak;
+
+  const sendMessage = useCallback(async (
+    text: string,
+    confirmed?: boolean,
+    action?: typeof pendingAction,
+    fromVoice = false,
+  ) => {
     if (!text.trim() && !confirmed) return;
-    if (isLoading) return; // Prevent double-submit
+    if (isLoading) return;
+
+    const effectiveAction = action ?? pendingRef.current;
+    const isConfirm = confirmed || (fromVoice && effectiveAction && isVoiceConfirm(text));
 
     const userMsg: Message = {
       id: Date.now().toString(),
       role: "user",
-      content: confirmed ? (text || "Да, разрешаю") : text,
+      content: isConfirm ? (text || "Да, разрешаю") : text,
     };
 
     const history = [...messages, userMsg];
@@ -201,12 +247,12 @@ export function JarvisChat() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          // Filter out the initial welcome message (id="welcome") before sending to API
           messages: history
             .filter(m => m.id !== "welcome")
             .map(m => ({ role: m.role, content: m.content })),
-          confirmed,
-          pendingAction: action ?? undefined,
+          confirmed: isConfirm,
+          pendingAction: isConfirm ? effectiveAction ?? undefined : undefined,
+          pageContext,
         }),
       });
 
@@ -215,26 +261,27 @@ export function JarvisChat() {
         error?: string;
         toolUsed?: string;
         toolResult?: ToolResult;
+        steps?: JarvisStep[];
+        actions?: JarvisAction[];
         pendingAction?: { toolName: string; args: Record<string, unknown> };
         needsConfirmation?: boolean;
       };
 
       if (data.error) {
         const raw = data.error ?? "";
-        const isQuota = res.status === 429 || raw.includes("лимит") || raw.toLowerCase().includes("quota");
-        const isTechnical = raw.includes("GoogleGenerativeAI") || raw.includes("generativelanguage.googleapis.com");
+        const isQuota = res.status === 429 || raw.includes("лимит");
         setMessages(prev => [...prev, {
           id: Date.now().toString(),
           role: "assistant" as const,
           content: isQuota
-            ? "⏳ Превышен лимит Gemini API. Подождите 1-2 минуты и попробуйте снова.\n\nЕсли ошибка повторяется — создайте новый API ключ на aistudio.google.com и обновите переменную GEMINI_API_KEY в Vercel."
-            : isTechnical
-              ? "Не удалось получить ответ от AI. Попробуйте через минуту."
-              : raw || "Неизвестная ошибка",
+            ? "⏳ Лимит Gemini. Подождите 1–2 минуты."
+            : raw,
           isError: true,
         }]);
         return;
       }
+
+      applyActions(data.actions);
 
       const assistantMsg: Message = {
         id: (Date.now() + 1).toString(),
@@ -242,26 +289,44 @@ export function JarvisChat() {
         content: data.reply ?? "",
         toolUsed: data.toolUsed,
         toolResult: data.toolResult,
+        steps: data.steps,
         pendingAction: data.pendingAction,
         needsConfirmation: data.needsConfirmation,
       };
 
       setMessages(prev => [...prev, assistantMsg]);
-      if (data.pendingAction) {
+
+      if (data.needsConfirmation && data.pendingAction) {
         setPendingAction(data.pendingAction);
       } else {
         setPendingAction(null);
+        if (data.toolUsed && ["create_case", "create_client", "update_case", "create_contract", "add_task"].includes(data.toolUsed)) {
+          router.refresh();
+        }
+      }
+
+      if (fromVoice || voiceModeRef.current) {
+        speakRef.current(data.reply ?? "Готово");
       }
     } catch {
       setMessages(prev => [...prev, {
         id: Date.now().toString(),
         role: "assistant",
-        content: "Произошла ошибка подключения. Попробуйте ещё раз.",
+        content: "Ошибка подключения. Попробуйте ещё раз.",
+        isError: true,
       }]);
     } finally {
       setIsLoading(false);
     }
-  }, [messages, isLoading]);
+  }, [messages, isLoading, pageContext, applyActions, router]);
+
+  sendMessageRef.current = sendMessage;
+
+  useEffect(() => {
+    if (!voiceMode || isLoading || isListening || pendingAction) return;
+    const t = setTimeout(() => startListening(), 1200);
+    return () => clearTimeout(t);
+  }, [voiceMode, isLoading, isListening, pendingAction, messages, startListening]);
 
   const handleConfirm = useCallback(async () => {
     if (!pendingAction) return;
@@ -292,52 +357,33 @@ export function JarvisChat() {
     }
   }
 
-  const toggleListening = useCallback(() => {
-    if (isListening) {
-      recognitionRef.current?.stop();
-      setIsListening(false);
-      return;
-    }
-
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const w = window as any;
-    const SR = w.SpeechRecognition ?? w.webkitSpeechRecognition;
-    if (!SR) {
-      alert("Ваш браузер не поддерживает распознавание речи. Используйте Chrome.");
-      return;
-    }
-
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const recognition: any = new SR();
-    recognition.lang = "ru-RU";
-    recognition.continuous = false;
-    recognition.interimResults = false;
-    recognitionRef.current = recognition;
-
-    recognition.onstart = () => setIsListening(true);
-    recognition.onend = () => setIsListening(false);
-    recognition.onerror = () => setIsListening(false);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    recognition.onresult = (event: any) => {
-      const transcript = (event.results[0]?.[0]?.transcript ?? "") as string;
-      if (transcript.trim()) {
-        sendMessage(transcript);
-      }
-    };
-
-    recognition.start();
-  }, [isListening, sendMessage]);
-
   const quickCommands = [
     "Покажи статистику",
     "Последние 5 дел",
-    "Дела в суде",
-    "Составь исковое заявление о взыскании долга",
-    "Создать договор №001-2026",
+    "Что просрочено?",
+    "Открой договоры",
+    "Создай дело для тестового клиента",
   ];
 
   return (
     <div className="flex flex-col h-full min-h-0">
+      <div className="flex items-center gap-2 mb-3 shrink-0">
+        <button
+          type="button"
+          onClick={() => setVoiceMode(v => !v)}
+          className={`flex items-center gap-2 rounded-full px-3 py-1.5 text-xs font-medium border transition-colors ${
+            voiceMode
+              ? "bg-violet-600 text-white border-violet-600"
+              : "border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-300"
+          }`}
+        >
+          <Radio className={`h-3.5 w-3.5 ${voiceMode ? "animate-pulse" : ""}`} />
+          {voiceMode ? "Режим Jarvis: вкл" : "Режим Jarvis: выкл"}
+        </button>
+        {voiceMode && (
+          <span className="text-[11px] text-zinc-500">Говорите команды — отвечу голосом и выполню действие</span>
+        )}
+      </div>
       {/* Messages */}
       <div className="flex-1 overflow-y-auto space-y-4 pb-4">
         {messages.length === 1 && (
@@ -395,6 +441,16 @@ export function JarvisChat() {
 
               {msg.toolResult && <ResultCard toolName={msg.toolUsed!} data={msg.toolResult} />}
 
+              {msg.steps && msg.steps.length > 1 && (
+                <div className="mt-1 space-y-1 rounded-lg border border-zinc-100 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900/50 px-2 py-1.5">
+                  {msg.steps.map((s, i) => (
+                    <p key={i} className="text-[10px] text-zinc-500">
+                      {s.success ? "✓" : "✗"} {TOOL_LABELS[s.tool] ?? s.tool}: {s.message}
+                    </p>
+                  ))}
+                </div>
+              )}
+
               {/* Only show confirm buttons for the LATEST pending message, not all old ones */}
               {msg.needsConfirmation && !msg.confirmed && !msg.denied &&
                msg.pendingAction && pendingAction &&
@@ -442,16 +498,15 @@ export function JarvisChat() {
         {isListening && (
           <div className="flex items-center gap-2 rounded-lg bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 px-3 py-2 text-xs text-red-700 dark:text-red-300">
             <span className="h-2 w-2 rounded-full bg-red-500 animate-pulse" />
-            Слушаю... говорите команду
+            {interim ? `Слышу: «${interim}»` : "Слушаю... говорите команду"}
           </div>
         )}
         <div className="flex gap-2">
           <Textarea
-            ref={textareaRef}
             value={input}
             onChange={e => setInput(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder="Напишите команду или нажмите микрофон..."
+            placeholder="Команда: «открой дела», «создай клиента»..."
             className="resize-none min-h-[44px] max-h-[120px] text-sm dark:bg-zinc-900 dark:border-zinc-700"
             rows={1}
             disabled={isLoading}
