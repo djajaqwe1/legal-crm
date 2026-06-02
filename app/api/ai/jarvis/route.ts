@@ -3,6 +3,9 @@ import { resolveWorkspaceId } from "@/lib/workspace-scope";
 import { formatGeminiUserError } from "@/lib/gemini-models";
 import { buildJarvisSystemPrompt, buildWorkspaceSnapshot } from "@/lib/jarvis/context";
 import { runJarvisAgent, executeConfirmedAction } from "@/lib/jarvis/agent";
+import { executeJarvisTool } from "@/lib/jarvis/executor";
+import { matchJarvisIntent, formatToolReply } from "@/lib/jarvis/intents";
+import { READ_ONLY_TOOLS } from "@/lib/jarvis/types";
 import { VOICE_CONFIRM_RE } from "@/lib/jarvis/types";
 import {
   appendJarvisMessages,
@@ -114,6 +117,44 @@ export async function POST(req: Request) {
 
     const snapshot = await buildWorkspaceSnapshot(wid);
     const systemPrompt = buildJarvisSystemPrompt(snapshot, pageContext);
+
+    const intent = matchJarvisIntent(lastText);
+    if (intent && READ_ONLY_TOOLS.has(intent.toolName)) {
+      try {
+        const toolResult = await executeJarvisTool(wid, intent.toolName, intent.args);
+        const reply = formatToolReply(intent.toolName, toolResult.data, toolResult.message);
+
+        await appendJarvisMessages(sessionId, [
+          { role: "user", content: lastText },
+          {
+            role: "assistant",
+            content: reply,
+            metadata: {
+              toolUsed: intent.toolName,
+              toolResult: toolResult.data,
+            },
+          },
+        ]);
+
+        if (isFirstUserMessage && session.title === "Новый чат") {
+          void autoTitleSession(sessionId, lastText);
+        }
+
+        return NextResponse.json({
+          reply,
+          toolUsed: intent.toolName,
+          toolResult: toolResult.data,
+          actions: toolResult.actions,
+          needsConfirmation: false,
+          sessionTitle: isFirstUserMessage ? lastText.slice(0, 48) : undefined,
+          sessionId,
+        });
+      } catch (toolErr) {
+        const msg = toolErr instanceof Error ? toolErr.message : "Tool error";
+        const userMessage = formatGeminiUserError(msg);
+        return NextResponse.json({ error: userMessage }, { status: 503 });
+      }
+    }
 
     const rawHistory = messages.slice(0, -1).map(m => ({
       role: m.role === "user" ? ("user" as const) : ("model" as const),

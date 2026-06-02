@@ -20,11 +20,18 @@ export type AgentRunResult = {
   modelUsed?: string;
 };
 
-async function startGeminiChat(
+export async function runJarvisAgent(
+  workspaceId: string,
   systemInstruction: string,
   history: HistoryMessage[],
-): Promise<{ chat: ChatSession; modelUsed: string }> {
-  let lastError: Error | null = null;
+  lastMessage: string,
+): Promise<AgentRunResult> {
+  const trimmedHistory = history.slice(-10);
+  let chat: ChatSession | null = null;
+  let modelUsed: string = GEMINI_MODELS[0];
+  let response;
+  let lastSendError: Error | null = null;
+
   for (const modelName of GEMINI_MODELS) {
     try {
       const genAI = new GoogleGenerativeAI(GEMINI_KEY);
@@ -33,27 +40,21 @@ async function startGeminiChat(
         systemInstruction,
         tools: [{ functionDeclarations: JARVIS_TOOLS }],
       });
-      const chat = model.startChat({ history });
-      return { chat, modelUsed: modelName };
+      chat = model.startChat({ history: trimmedHistory });
+      response = (await chat.sendMessage(lastMessage)).response;
+      modelUsed = modelName;
+      lastSendError = null;
+      break;
     } catch (e) {
-      lastError = e instanceof Error ? e : new Error(String(e));
-      if (!isGeminiRetryableError(lastError.message)) throw lastError;
-      if (lastError.message.includes("429")) await new Promise(r => setTimeout(r, 1200));
+      lastSendError = e instanceof Error ? e : new Error(String(e));
+      chat = null;
+      if (!isGeminiRetryableError(lastSendError.message)) throw lastSendError;
+      if (lastSendError.message.includes("429")) await new Promise(r => setTimeout(r, 1200));
     }
   }
-  throw lastError ?? new Error("All Gemini models failed");
-}
 
-export async function runJarvisAgent(
-  workspaceId: string,
-  systemInstruction: string,
-  history: HistoryMessage[],
-  lastMessage: string,
-): Promise<AgentRunResult> {
-  const trimmedHistory = history.slice(-10);
-  const { chat, modelUsed } = await startGeminiChat(systemInstruction, trimmedHistory);
+  if (!response || !chat) throw lastSendError ?? new Error("All Gemini models failed");
 
-  let response = (await chat.sendMessage(lastMessage)).response;
   const steps: JarvisStep[] = [];
   const actions: JarvisAction[] = [];
   let lastToolResult: unknown;
@@ -91,7 +92,13 @@ export async function runJarvisAgent(
       const args = (call.args ?? {}) as Record<string, unknown>;
       if (!toolName || !READ_ONLY_TOOLS.has(toolName)) continue;
 
-      const result = await executeJarvisTool(workspaceId, toolName, args);
+      let result;
+      try {
+        result = await executeJarvisTool(workspaceId, toolName, args);
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : "Tool failed";
+        result = { success: false, message: msg, data: null };
+      }
       steps.push({ tool: toolName, message: result.message, success: result.success });
       if (result.actions) actions.push(...result.actions);
       lastToolResult = result.data;
