@@ -27,6 +27,7 @@ export async function PATCH(request: Request, { params }: Params) {
       phone?: string | null;
       email?: string | null;
       resetPortalAccess?: boolean;
+      oneDriveUrl?: string | null;
     };
 
     const data: {
@@ -34,6 +35,7 @@ export async function PATCH(request: Request, { params }: Params) {
       manager?: string;
       phone?: string | null;
       email?: string | null;
+      oneDriveUrl?: string | null;
       portalPasswordHash?: string | null;
     } = {};
 
@@ -66,6 +68,18 @@ export async function PATCH(request: Request, { params }: Params) {
 
     if (body.resetPortalAccess === true) {
       data.portalPasswordHash = null;
+    }
+
+    if (body.oneDriveUrl !== undefined) {
+      if (body.oneDriveUrl === null || (typeof body.oneDriveUrl === "string" && !body.oneDriveUrl.trim())) {
+        data.oneDriveUrl = null;
+      } else if (typeof body.oneDriveUrl === "string") {
+        const url = body.oneDriveUrl.trim();
+        if (!/^https?:\/\//i.test(url)) {
+          return NextResponse.json({ error: "OneDrive URL должен начинаться с http(s)://" }, { status: 400 });
+        }
+        data.oneDriveUrl = url;
+      }
     }
 
     if (Object.keys(data).length === 0) {

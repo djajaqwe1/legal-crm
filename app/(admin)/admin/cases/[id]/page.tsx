@@ -10,6 +10,8 @@ import { AddTaskDialog, AddDocumentDialog, TaskItem, DocumentItem } from "@/comp
 import { CaseDescriptionEditor } from "@/components/crm/case-description-editor";
 import { CaseStatusControl } from "@/components/crm/case-status-control";
 import { CaseObjectControl } from "@/components/crm/case-object-control";
+import { CaseRelationsControl } from "@/components/crm/case-relations-control";
+import { CASE_KIND_LABELS } from "@/lib/case-tree";
 import { contractStatusLabel } from "@/lib/contract-status";
 import {
   Briefcase,
@@ -66,7 +68,12 @@ export default async function CaseDetailPage({ params }: PageProps) {
         
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div className="flex flex-col gap-1">
-            <h2 className="text-3xl font-bold tracking-tight text-zinc-900 dark:text-zinc-100">{caseData.title}</h2>
+            <div className="flex flex-wrap items-center gap-2">
+              <h2 className="text-3xl font-bold tracking-tight text-zinc-900 dark:text-zinc-100">{caseData.title}</h2>
+              <Badge variant="outline" className="text-[10px] uppercase">
+                {CASE_KIND_LABELS[caseData.kind]}
+              </Badge>
+            </div>
             <p className="text-sm text-zinc-500">
               Объект:{" "}
               <span className="font-medium text-zinc-700 dark:text-zinc-300">
@@ -134,6 +141,16 @@ export default async function CaseDetailPage({ params }: PageProps) {
                     currentObjectId={caseData.objectId}
                   />
                 </div>
+              </div>
+
+              <div className="space-y-2">
+                <p className="text-xs font-medium uppercase text-zinc-500">Связи и тип дела</p>
+                <CaseRelationsControl
+                  caseId={caseData.id}
+                  kind={caseData.kind}
+                  parentCase={caseData.parentCase}
+                  childCases={caseData.childCases}
+                />
               </div>
 
               <div className="space-y-2">

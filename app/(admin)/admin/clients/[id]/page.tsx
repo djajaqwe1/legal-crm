@@ -26,6 +26,7 @@ import {
   Building2,
   Briefcase,
   Mail,
+  Cloud,
 } from "lucide-react";
 
 type PageProps = {
@@ -116,6 +117,22 @@ export default async function ClientDetailPage({ params }: PageProps) {
                 <p className="text-xs font-medium uppercase text-zinc-500">Ответственный</p>
                 <p className="font-medium">{client.manager}</p>
               </div>
+              {client.oneDriveUrl && (
+                <div className="flex items-start gap-2">
+                  <Cloud className="mt-0.5 h-4 w-4 shrink-0 text-zinc-400" />
+                  <div>
+                    <p className="text-xs font-medium uppercase text-zinc-500">OneDrive</p>
+                    <a
+                      href={client.oneDriveUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-sm text-blue-600 hover:underline break-all"
+                    >
+                      Открыть папку клиента
+                    </a>
+                  </div>
+                </div>
+              )}
             </CardContent>
           </Card>
 
@@ -131,6 +148,7 @@ export default async function ClientDetailPage({ params }: PageProps) {
                   manager: client.manager,
                   phone: client.phone ?? "",
                   email: client.email ?? "",
+                  oneDriveUrl: client.oneDriveUrl,
                   portalAccess,
                 }}
               />

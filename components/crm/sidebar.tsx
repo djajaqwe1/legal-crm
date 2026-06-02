@@ -16,6 +16,7 @@ import {
   ExternalLink,
   Bot,
   Wallet,
+  Cloud,
 } from "lucide-react";
 import { ThemeToggle } from "@/components/crm/theme-toggle";
 
@@ -31,6 +32,7 @@ const navItems = [
 ];
 
 const integrationItems = [
+  { label: "OneDrive", href: "/admin/integration/onedrive", icon: Cloud },
   { label: "Судебный кабинет", href: "/admin/integration/sudkz", icon: Gavel },
   { label: "База Әділет", href: "/admin/integration/adilet", icon: BookOpen },
 ];

@@ -36,6 +36,8 @@ model Client {
   category            ClientCategory   @default(LEGAL_ENTITY)
   /// Группа: «Физлица», «Юрлица», имя крупного клиента
   folderGroup         String?
+  /// Папка клиента в OneDrive / SharePoint
+  oneDriveUrl         String?
   createdAt           DateTime         @default(now())
   updatedAt           DateTime         @updatedAt
   email               String?

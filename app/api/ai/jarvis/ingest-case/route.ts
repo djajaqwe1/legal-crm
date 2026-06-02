@@ -6,6 +6,8 @@ import { GEMINI_MODELS, formatGeminiUserError } from "@/lib/gemini-models";
 import { CaseKind, CaseStatus, ClientCategory } from "@/lib/generated-client";
 import { ruToCaseStatus } from "@/lib/case-status";
 import { appendJarvisMessages } from "@/lib/jarvis/sessions";
+import { addDocument } from "@/lib/crm-repository";
+import { storeCaseFile } from "@/lib/storage/document-storage";
 
 export const dynamic = "force-dynamic";
 
@@ -153,17 +155,15 @@ ${comment ? `Комментарий юриста: ${comment}` : ""}`;
 
     for (const file of files) {
       const text = await extractText(file);
-      await prisma.caseDocument.create({
-        data: {
-          legalCaseId: newCase.id,
-          name: file.name,
-          path: `#import-${Date.now()}`,
-          category: "evidence",
-          mimeType: file.type,
-          sizeBytes: file.size,
-          extractedText: text,
-          storageProvider: "crm",
-        },
+      const buffer = Buffer.from(await file.arrayBuffer());
+      const stored = await storeCaseFile(newCase.id, file.name, buffer, file.type || "application/octet-stream");
+      await addDocument(newCase.id, file.name, stored.path, {
+        storageProvider: stored.storageProvider,
+        externalUrl: stored.externalUrl,
+        mimeType: stored.mimeType ?? file.type,
+        sizeBytes: stored.sizeBytes ?? file.size,
+        extractedText: text,
+        category: "evidence",
       });
     }
 

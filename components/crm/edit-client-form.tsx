@@ -14,6 +14,7 @@ export type EditClientFormProps = {
     manager: string;
     phone: string;
     email: string;
+    oneDriveUrl?: string | null;
     portalAccess: PortalClientAccess;
   };
 };
@@ -24,6 +25,7 @@ export function EditClientForm({ client }: EditClientFormProps) {
   const [manager, setManager] = useState(client.manager);
   const [phone, setPhone] = useState(client.phone);
   const [email, setEmail] = useState(client.email);
+  const [oneDriveUrl, setOneDriveUrl] = useState(client.oneDriveUrl ?? "");
   const [resetPortal, setResetPortal] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -41,6 +43,7 @@ export function EditClientForm({ client }: EditClientFormProps) {
           manager,
           phone,
           email,
+          oneDriveUrl: oneDriveUrl.trim() || null,
           resetPortalAccess: resetPortal,
         }),
       });
@@ -75,6 +78,18 @@ export function EditClientForm({ client }: EditClientFormProps) {
           <label className="text-xs font-bold uppercase text-zinc-500">E-mail (для ЛК)</label>
           <Input type="email" value={email} onChange={(ev) => setEmail(ev.target.value)} placeholder="client@…" />
         </div>
+      </div>
+      <div className="space-y-2">
+        <label className="text-xs font-bold uppercase text-zinc-500">Папка OneDrive / SharePoint</label>
+        <Input
+          value={oneDriveUrl}
+          onChange={(ev) => setOneDriveUrl(ev.target.value)}
+          placeholder="https://…sharepoint.com/… или onedrive.live.com/…"
+          type="url"
+        />
+        <p className="text-xs text-zinc-500">
+          Ссылка на папку клиента в облаке. OAuth пока не подключён — только URL для быстрого перехода.
+        </p>
       </div>
       <label className="flex cursor-pointer items-start gap-2 text-sm text-zinc-700 dark:text-zinc-300">
         <input

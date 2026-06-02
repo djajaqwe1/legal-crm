@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { ruToCaseStatus } from "@/lib/case-status";
 import { prisma } from "@/lib/prisma";
-import type { CaseStatus } from "@/lib/generated-client";
+import { CaseKind, type CaseStatus } from "@/lib/generated-client";
 import { resolveWorkspaceId } from "@/lib/workspace-scope";
 
 type Params = {
@@ -20,9 +20,17 @@ export async function PATCH(request: Request, { params }: Params) {
       status?: string;
       objectId?: string | null;
       description?: string;
+      kind?: string;
+      parentCaseId?: string | null;
     };
 
-    const data: { status?: CaseStatus; objectId?: string | null; description?: string } = {};
+    const data: {
+      status?: CaseStatus;
+      objectId?: string | null;
+      description?: string;
+      kind?: CaseKind;
+      parentCaseId?: string | null;
+    } = {};
 
     const existing = await prisma.legalCase.findFirst({
       where: { id, workspaceId: wid },
@@ -62,9 +70,36 @@ export async function PATCH(request: Request, { params }: Params) {
       data.description = body.description;
     }
 
+    if (body.kind !== undefined) {
+      if (!Object.values(CaseKind).includes(body.kind as CaseKind)) {
+        return NextResponse.json({ error: "Недопустимый тип дела" }, { status: 400 });
+      }
+      data.kind = body.kind as CaseKind;
+    }
+
+    if (body.parentCaseId !== undefined) {
+      if (body.parentCaseId === null || body.parentCaseId === "") {
+        data.parentCaseId = null;
+      } else {
+        const parent = await prisma.legalCase.findFirst({
+          where: { id: body.parentCaseId, workspaceId: wid, clientId: existing.clientId },
+        });
+        if (!parent) {
+          return NextResponse.json(
+            { error: "Родительское дело не найдено или принадлежит другому клиенту" },
+            { status: 400 },
+          );
+        }
+        if (parent.id === id) {
+          return NextResponse.json({ error: "Дело не может быть родителем самого себя" }, { status: 400 });
+        }
+        data.parentCaseId = body.parentCaseId;
+      }
+    }
+
     if (Object.keys(data).length === 0) {
       return NextResponse.json(
-        { error: "Provide status, objectId and/or description" },
+        { error: "Provide status, objectId, description, kind and/or parentCaseId" },
         { status: 400 },
       );
     }

@@ -18,9 +18,19 @@ import {
 } from "./db-health";
 import { resolveWorkspaceId } from "./workspace-scope";
 
+const caseRelationSelect = {
+  id: true,
+  code: true,
+  title: true,
+  kind: true,
+  status: true,
+} as const;
+
 const caseDetailInclude = {
   client: true,
   object: true,
+  parentCase: { select: caseRelationSelect },
+  childCases: { select: caseRelationSelect, orderBy: { createdAt: "asc" as const } },
   tasks: { orderBy: { createdAt: "desc" as const } },
   documents: { orderBy: { createdAt: "desc" as const } },
   contracts: { orderBy: { createdAt: "desc" as const } },
@@ -80,6 +90,7 @@ function buildOfflineCaseDetail(id: string): CaseDetailRecord | null {
     manager,
     category: ClientCategory.LEGAL_ENTITY,
     folderGroup: null,
+    oneDriveUrl: null,
     email: null,
     phone: "+7 (777) 000-00-00",
     portalPasswordHash: null,
@@ -113,6 +124,8 @@ function buildOfflineCaseDetail(id: string): CaseDetailRecord | null {
     ...base,
     client,
     object: null,
+    parentCase: null,
+    childCases: [],
     tasks: [],
     documents: [],
     contracts: [],
@@ -130,6 +143,7 @@ function buildOfflineClientDetail(id: string): ClientDetailRecord | null {
     manager: row.manager,
     category: ClientCategory.LEGAL_ENTITY,
     folderGroup: null,
+    oneDriveUrl: null,
     email: null,
     phone: "+7 (777) 000-00-00",
     portalPasswordHash: null,
@@ -297,7 +311,19 @@ export async function addTask(caseId: string, title: string, dueDate?: string) {
   }
 }
 
-export async function addDocument(caseId: string, name: string, path: string) {
+export async function addDocument(
+  caseId: string,
+  name: string,
+  path: string,
+  meta?: {
+    storageProvider?: string;
+    externalUrl?: string | null;
+    mimeType?: string | null;
+    sizeBytes?: number | null;
+    extractedText?: string | null;
+    category?: string;
+  },
+) {
   const wid = await resolveWorkspaceId();
   if (!wid) throw new Error("WORKSPACE_UNAVAILABLE");
   const k = await prisma.legalCase.findFirst({
@@ -310,6 +336,12 @@ export async function addDocument(caseId: string, name: string, path: string) {
         legalCaseId: caseId,
         name,
         path,
+        category: meta?.category ?? "other",
+        storageProvider: meta?.storageProvider ?? "crm",
+        externalUrl: meta?.externalUrl ?? null,
+        mimeType: meta?.mimeType ?? null,
+        sizeBytes: meta?.sizeBytes ?? null,
+        extractedText: meta?.extractedText ?? null,
       },
     });
   } catch (error) {
