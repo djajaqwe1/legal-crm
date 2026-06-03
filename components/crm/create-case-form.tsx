@@ -21,6 +21,7 @@ export function CreateCaseForm({ clients }: CreateCaseFormProps) {
   const [code, setCode] = useState("");
   const [title, setTitle] = useState("");
   const [status, setStatus] = useState("Новый");
+  const [kind, setKind] = useState("COURT");
   const [deadline, setDeadline] = useState("");
   const [clientId, setClientId] = useState(clients[0]?.id ?? "");
   const [objectId, setObjectId] = useState("");
@@ -98,6 +99,7 @@ export function CreateCaseForm({ clients }: CreateCaseFormProps) {
           code,
           title,
           status,
+          kind,
           deadline,
           clientId,
           objectId: objectId || null,
@@ -112,6 +114,7 @@ export function CreateCaseForm({ clients }: CreateCaseFormProps) {
       setCode("");
       setTitle("");
       setStatus("Новый");
+      setKind("COURT");
       setDeadline("");
       setObjectId("");
       setIsOpen(false);
@@ -220,19 +223,33 @@ export function CreateCaseForm({ clients }: CreateCaseFormProps) {
             )}
           </div>
 
-          <div className="space-y-2">
-            <label className="text-xs font-bold uppercase text-zinc-500">Статус</label>
-            <select
-              value={status}
-              onChange={(event) => setStatus(event.target.value)}
-              className="w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-500"
-            >
-              <option>Новый</option>
-              <option>В работе</option>
-              <option>Суд</option>
-              <option>Пауза</option>
-              <option>Завершено</option>
-            </select>
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <label className="text-xs font-bold uppercase text-zinc-500">Тип дела</label>
+              <select
+                value={kind}
+                onChange={(event) => setKind(event.target.value)}
+                className="w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-500"
+              >
+                <option value="CONSULTATION">Консультация</option>
+                <option value="COURT">Судебное</option>
+                <option value="PROJECT">Проект документов</option>
+              </select>
+            </div>
+            <div className="space-y-2">
+              <label className="text-xs font-bold uppercase text-zinc-500">Статус</label>
+              <select
+                value={status}
+                onChange={(event) => setStatus(event.target.value)}
+                className="w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-500"
+              >
+                <option>Новый</option>
+                <option>В работе</option>
+                <option>Суд</option>
+                <option>Пауза</option>
+                <option>Завершено</option>
+              </select>
+            </div>
           </div>
 
           {error && <p className="text-xs text-red-600">{error}</p>}

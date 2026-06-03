@@ -7,6 +7,7 @@ import { CaseKind, CaseStatus, ClientCategory } from "@/lib/generated-client";
 import { ruToCaseStatus } from "@/lib/case-status";
 import { appendJarvisMessages } from "@/lib/jarvis/sessions";
 import { addDocument } from "@/lib/crm-repository";
+import { extractDocumentText, extractionSummary } from "@/lib/document-extract";
 import { storeCaseFile } from "@/lib/storage/document-storage";
 
 export const dynamic = "force-dynamic";
@@ -15,14 +16,10 @@ const MAX_FILE_BYTES = 10 * 1024 * 1024;
 const ALLOWED = new Set(["text/plain", "application/pdf"]);
 
 async function extractText(file: File): Promise<string> {
-  if (file.type === "text/plain") {
-    return (await file.text()).slice(0, 50_000);
-  }
-  if (file.type === "application/pdf") {
-    const buf = Buffer.from(await file.arrayBuffer());
-    return `[PDF: ${file.name}, ${buf.length} bytes — текст будет извлечён AI при анализе]`;
-  }
-  return `[Файл: ${file.name}, тип ${file.type}]`;
+  const buffer = Buffer.from(await file.arrayBuffer());
+  const extracted = await extractDocumentText(buffer, file.type || "application/octet-stream", file.name);
+  if (extracted) return extracted;
+  return extractionSummary(file.type, file.name, null);
 }
 
 export async function POST(req: Request) {
@@ -154,8 +151,10 @@ ${comment ? `Комментарий юриста: ${comment}` : ""}`;
     });
 
     for (const file of files) {
-      const text = await extractText(file);
       const buffer = Buffer.from(await file.arrayBuffer());
+      const text =
+        (await extractDocumentText(buffer, file.type || "application/octet-stream", file.name)) ??
+        extractionSummary(file.type, file.name, null);
       const stored = await storeCaseFile(newCase.id, file.name, buffer, file.type || "application/octet-stream");
       await addDocument(newCase.id, file.name, stored.path, {
         storageProvider: stored.storageProvider,

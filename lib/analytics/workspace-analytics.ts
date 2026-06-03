@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
-import { CaseKind, CaseOutcome } from "@/lib/generated-client";
+import { CaseKind } from "@/lib/generated-client";
 import { caseStatusToRu } from "@/lib/case-status";
+import { outcomeLabel } from "@/lib/case-outcome";
 
 export type WorkspaceAnalytics = {
   totals: {
@@ -26,24 +27,7 @@ const KIND_LABELS: Record<CaseKind, string> = {
   PROJECT: "Проекты документов",
 };
 
-const OUTCOME_LABELS: Record<CaseOutcome, string> = {
-  PENDING: "В процессе",
-  WON_FULL: "Иск удовлетворён полностью",
-  WON_PARTIAL: "Иск удовлетворён частично",
-  DISMISSED: "Отказ в иске",
-  REJECTED: "Отказано",
-  LEFT_WITHOUT_CONSIDERATION: "Оставлено без рассмотрения",
-  TERMINATED: "Производство прекращено",
-  SETTLED: "Мировое соглашение",
-  IN_APPEAL: "Апелляция",
-  IN_CASSATION: "Кассация",
-  IN_SUPREME: "Верховный суд",
-};
-
-export function outcomeLabel(o: CaseOutcome | null): string {
-  if (!o) return "Не указан";
-  return OUTCOME_LABELS[o] ?? o;
-}
+export { outcomeLabel };
 
 export async function getWorkspaceAnalytics(workspaceId: string): Promise<WorkspaceAnalytics> {
   const [clients, cases, docs, payments, casesDetailed] = await Promise.all([

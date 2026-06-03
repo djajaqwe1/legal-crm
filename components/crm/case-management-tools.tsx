@@ -21,35 +21,55 @@ type Document = {
   name: string;
   path: string;
   createdAt?: string | Date;
+  extractedText?: string | null;
 };
 
 export function DocumentItem({ doc }: { doc: Document }) {
+  const [expanded, setExpanded] = useState(false);
   const downloadable = isDownloadableDocument(doc.path);
   const hint = documentStorageHint(doc.path);
+  const hasText = Boolean(doc.extractedText && doc.extractedText.length > 20 && !doc.extractedText.startsWith("["));
 
   return (
-    <div className="flex items-center justify-between rounded-lg border border-zinc-100 p-3 hover:bg-zinc-50 transition-colors dark:border-zinc-800 dark:hover:bg-zinc-900/50">
-      <div className="flex items-center gap-3 min-w-0">
-        <FileText className="h-4 w-4 text-zinc-400 shrink-0" />
-        <div className="min-w-0">
-          <p className="text-sm font-medium truncate">{doc.name}</p>
-          {hint && !downloadable && (
-            <p className="text-[10px] text-zinc-400">{hint}</p>
-          )}
+    <div className="rounded-lg border border-zinc-100 p-3 hover:bg-zinc-50 transition-colors dark:border-zinc-800 dark:hover:bg-zinc-900/50">
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center gap-3 min-w-0 flex-1">
+          <FileText className="h-4 w-4 text-zinc-400 shrink-0" />
+          <div className="min-w-0">
+            <p className="text-sm font-medium truncate">{doc.name}</p>
+            {hint && !downloadable && (
+              <p className="text-[10px] text-zinc-400">{hint}</p>
+            )}
+            {hasText && (
+              <button
+                type="button"
+                onClick={() => setExpanded((v) => !v)}
+                className="text-[10px] text-blue-600 hover:underline mt-0.5"
+              >
+                {expanded ? "Скрыть текст" : "Показать извлечённый текст"}
+              </button>
+            )}
+          </div>
         </div>
+        {downloadable && (
+          <a
+            href={doc.path}
+            target="_blank"
+            rel="noopener noreferrer"
+            download={doc.name}
+            className="ml-2 shrink-0"
+          >
+            <Button variant="ghost" size="icon" className="h-7 w-7" title="Скачать">
+              <Download className="h-3.5 w-3.5" />
+            </Button>
+          </a>
+        )}
       </div>
-      {downloadable && (
-        <a
-          href={doc.path}
-          target="_blank"
-          rel="noopener noreferrer"
-          download={doc.name}
-          className="ml-2 shrink-0"
-        >
-          <Button variant="ghost" size="icon" className="h-7 w-7" title="Скачать">
-            <Download className="h-3.5 w-3.5" />
-          </Button>
-        </a>
+      {expanded && hasText && (
+        <pre className="mt-2 max-h-40 overflow-y-auto rounded-md bg-zinc-100 p-2 text-[10px] leading-relaxed text-zinc-700 whitespace-pre-wrap dark:bg-zinc-900 dark:text-zinc-300">
+          {doc.extractedText!.slice(0, 3000)}
+          {doc.extractedText!.length > 3000 ? "\n…" : ""}
+        </pre>
       )}
     </div>
   );
@@ -222,10 +242,13 @@ export function AddDocumentDialog({ caseId }: { caseId: string }) {
         method: "POST",
         body: form,
       });
-      const data = (await res.json()) as { error?: string };
+      const data = (await res.json()) as { error?: string; warning?: string };
       if (!res.ok) {
         setError(data.error ?? "Ошибка загрузки");
         return;
+      }
+      if (data.warning) {
+        console.info(data.warning);
       }
       setIsOpen(false);
       setFile(null);

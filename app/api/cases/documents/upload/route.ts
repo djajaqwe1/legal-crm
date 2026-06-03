@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { addDocument } from "@/lib/crm-repository";
+import { extractDocumentText } from "@/lib/document-extract";
 import { storeCaseFile } from "@/lib/storage/document-storage";
 import { isSupabaseStorageConfigured } from "@/lib/storage/supabase-storage";
 
@@ -41,10 +42,7 @@ export async function POST(request: Request) {
     const buffer = Buffer.from(await file.arrayBuffer());
     const stored = await storeCaseFile(caseId, file.name, buffer, file.type);
 
-    let extractedText: string | null = null;
-    if (file.type === "text/plain") {
-      extractedText = buffer.toString("utf-8").slice(0, 50_000);
-    }
+    const extractedText = await extractDocumentText(buffer, file.type, file.name);
 
     const doc = await addDocument(caseId, file.name, stored.path, {
       storageProvider: stored.storageProvider,

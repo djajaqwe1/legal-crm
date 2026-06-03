@@ -17,6 +17,7 @@ import {
   isDatabaseReachable,
 } from "./db-health";
 import { resolveWorkspaceId } from "./workspace-scope";
+import { CASE_KIND_LABELS } from "./case-tree";
 
 const caseRelationSelect = {
   id: true,
@@ -188,9 +189,15 @@ export type CaseView = {
   client: string;
   caseTitle: string;
   status: string;
+  kind: CaseKind;
+  kindLabel: string;
   deadline: string;
   /** Название связанного объекта (имущество, актив и т.д.), если есть */
   objectLabel?: string;
+  assignedLawyer?: string | null;
+  parentCaseId?: string | null;
+  parentCaseCode?: string | null;
+  documentCount: number;
 };
 
 export type CaseAssistantContext = {
@@ -219,8 +226,14 @@ const fallbackCases: CaseView[] = mockCases.map((item) => ({
   client: item.client,
   caseTitle: item.caseTitle,
   status: item.status,
+  kind: CaseKind.COURT,
+  kindLabel: CASE_KIND_LABELS[CaseKind.COURT],
   deadline: item.deadline,
   objectLabel: "",
+  assignedLawyer: null,
+  parentCaseId: null,
+  parentCaseCode: null,
+  documentCount: 0,
 }));
 
 export async function getCaseDetails(
@@ -435,7 +448,12 @@ export async function getCases(): Promise<CaseView[]> {
   try {
     const dbCases = await prisma.legalCase.findMany({
       where: { workspaceId: wid },
-      include: { client: true, object: true },
+      include: {
+        client: true,
+        object: true,
+        parentCase: { select: { id: true, code: true } },
+        _count: { select: { documents: true } },
+      },
       orderBy: { createdAt: "desc" },
     });
     return dbCases.map(mapCaseToView);
@@ -807,7 +825,12 @@ export async function getDashboardStats(): Promise<DashboardStats> {
 }
 
 function mapCaseToView(
-  item: LegalCase & { client: Client; object?: LegalObject | null },
+  item: LegalCase & {
+    client: Client;
+    object?: LegalObject | null;
+    parentCase?: { id: string; code: string } | null;
+    _count?: { documents: number };
+  },
 ): CaseView {
   return {
     id: item.id,
@@ -815,9 +838,15 @@ function mapCaseToView(
     client: item.client.name,
     caseTitle: item.title,
     status: statusMap[item.status],
+    kind: item.kind,
+    kindLabel: CASE_KIND_LABELS[item.kind] ?? item.kind,
     deadline: item.deadline
       ? item.deadline.toLocaleDateString("ru-RU")
       : "Без срока",
     objectLabel: item.object?.name ?? "",
+    assignedLawyer: item.assignedLawyer,
+    parentCaseId: item.parentCaseId,
+    parentCaseCode: item.parentCase?.code ?? null,
+    documentCount: item._count?.documents ?? 0,
   };
 }

@@ -11,7 +11,10 @@ import { CaseDescriptionEditor } from "@/components/crm/case-description-editor"
 import { CaseStatusControl } from "@/components/crm/case-status-control";
 import { CaseObjectControl } from "@/components/crm/case-object-control";
 import { CaseRelationsControl } from "@/components/crm/case-relations-control";
+import { CaseCourtPanel } from "@/components/crm/case-court-panel";
 import { CASE_KIND_LABELS } from "@/lib/case-tree";
+import { outcomeLabel } from "@/lib/case-outcome";
+import { CaseKind } from "@/lib/generated-client";
 import { contractStatusLabel } from "@/lib/contract-status";
 import {
   Briefcase,
@@ -143,7 +146,7 @@ export default async function CaseDetailPage({ params }: PageProps) {
                 </div>
               </div>
 
-              <div className="space-y-2">
+              <div className="space-y-2 sm:col-span-2">
                 <p className="text-xs font-medium uppercase text-zinc-500">Связи и тип дела</p>
                 <CaseRelationsControl
                   caseId={caseData.id}
@@ -152,6 +155,24 @@ export default async function CaseDetailPage({ params }: PageProps) {
                   childCases={caseData.childCases}
                 />
               </div>
+
+              {(caseData.kind === CaseKind.COURT || caseData.outcome || caseData.courtInstance) && (
+                <div className="space-y-2 sm:col-span-2">
+                  <CaseCourtPanel
+                    caseId={caseData.id}
+                    outcome={caseData.outcome}
+                    courtInstance={caseData.courtInstance}
+                    assignedLawyer={caseData.assignedLawyer}
+                  />
+                </div>
+              )}
+
+              {caseData.outcome && caseData.kind !== CaseKind.COURT && (
+                <div className="space-y-1">
+                  <p className="text-xs font-medium uppercase text-zinc-500">Исход</p>
+                  <p className="text-sm">{outcomeLabel(caseData.outcome)}</p>
+                </div>
+              )}
 
               <div className="space-y-2">
                 <p className="text-xs font-medium uppercase text-zinc-500">Описание / Суть дела</p>

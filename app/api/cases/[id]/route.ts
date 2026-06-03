@@ -1,7 +1,12 @@
 import { NextResponse } from "next/server";
 import { ruToCaseStatus } from "@/lib/case-status";
 import { prisma } from "@/lib/prisma";
-import { CaseKind, type CaseStatus } from "@/lib/generated-client";
+import {
+  CaseKind,
+  CaseOutcome,
+  CourtInstance,
+  type CaseStatus,
+} from "@/lib/generated-client";
 import { resolveWorkspaceId } from "@/lib/workspace-scope";
 
 type Params = {
@@ -22,6 +27,9 @@ export async function PATCH(request: Request, { params }: Params) {
       description?: string;
       kind?: string;
       parentCaseId?: string | null;
+      outcome?: string | null;
+      courtInstance?: string | null;
+      assignedLawyer?: string | null;
     };
 
     const data: {
@@ -30,6 +38,9 @@ export async function PATCH(request: Request, { params }: Params) {
       description?: string;
       kind?: CaseKind;
       parentCaseId?: string | null;
+      outcome?: CaseOutcome | null;
+      courtInstance?: CourtInstance | null;
+      assignedLawyer?: string | null;
     } = {};
 
     const existing = await prisma.legalCase.findFirst({
@@ -97,9 +108,36 @@ export async function PATCH(request: Request, { params }: Params) {
       }
     }
 
+    if (body.outcome !== undefined) {
+      if (body.outcome === null || body.outcome === "") {
+        data.outcome = null;
+      } else if (Object.values(CaseOutcome).includes(body.outcome as CaseOutcome)) {
+        data.outcome = body.outcome as CaseOutcome;
+      } else {
+        return NextResponse.json({ error: "Недопустимый исход дела" }, { status: 400 });
+      }
+    }
+
+    if (body.courtInstance !== undefined) {
+      if (body.courtInstance === null || body.courtInstance === "") {
+        data.courtInstance = null;
+      } else if (Object.values(CourtInstance).includes(body.courtInstance as CourtInstance)) {
+        data.courtInstance = body.courtInstance as CourtInstance;
+      } else {
+        return NextResponse.json({ error: "Недопустимая инстанция" }, { status: 400 });
+      }
+    }
+
+    if (body.assignedLawyer !== undefined) {
+      data.assignedLawyer =
+        typeof body.assignedLawyer === "string" && body.assignedLawyer.trim()
+          ? body.assignedLawyer.trim()
+          : null;
+    }
+
     if (Object.keys(data).length === 0) {
       return NextResponse.json(
-        { error: "Provide status, objectId, description, kind and/or parentCaseId" },
+        { error: "Provide at least one field to update" },
         { status: 400 },
       );
     }

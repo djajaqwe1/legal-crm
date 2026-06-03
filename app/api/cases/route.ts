@@ -1,4 +1,4 @@
-import { CaseStatus } from "@/lib/generated-client";
+import { CaseKind, CaseStatus } from "@/lib/generated-client";
 import { NextResponse } from "next/server";
 import { ruToCaseStatus } from "@/lib/case-status";
 import { prisma } from "@/lib/prisma";
@@ -39,6 +39,7 @@ export async function POST(request: Request) {
       code?: string;
       title?: string;
       status?: string;
+      kind?: string;
       deadline?: string;
       clientId?: string;
       objectId?: string | null;
@@ -72,12 +73,17 @@ export async function POST(request: Request) {
       objectId = obj.id;
     }
 
+    const kind = Object.values(CaseKind).includes(body.kind as CaseKind)
+      ? (body.kind as CaseKind)
+      : CaseKind.COURT;
+
     const legalCase = await prisma.legalCase.create({
       data: {
         workspaceId: wid,
         code: body.code.trim(),
         title: body.title.trim(),
         clientId: body.clientId,
+        kind,
         status: toStatus(body.status),
         deadline: body.deadline ? new Date(body.deadline) : null,
         objectId,
