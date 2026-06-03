@@ -23,8 +23,8 @@ export const JARVIS_PRESETS: JarvisPreset[] = [
   {
     id: "chat",
     label: "Свободный чат",
-    description: "Вопросы, команды, управление CRM",
-    placeholder: "Сообщение Джарвису…",
+    description: "Голосовой монолог → Джарвис выполняет за вас",
+    placeholder: "Опишите задачу или нажмите микрофон и говорите до остановки…",
   },
   {
     id: "register_case",

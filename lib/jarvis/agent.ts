@@ -1,11 +1,9 @@
-import { GoogleGenerativeAI, type GenerativeModel, type ChatSession } from "@google/generative-ai";
-import { GEMINI_MODELS, isGeminiRetryableError } from "@/lib/gemini-models";
 import { JARVIS_TOOLS } from "./tools";
 import { executeJarvisTool, buildConfirmText } from "./executor";
+import { createGeminiToolChat } from "@/lib/llm/router";
 import { MUTATING_TOOLS, READ_ONLY_TOOLS, type JarvisAction, type JarvisStep } from "./types";
 
-const GEMINI_KEY = process.env.GEMINI_API_KEY ?? "";
-const MAX_AGENT_STEPS = 8;
+const MAX_AGENT_STEPS = 10;
 
 type HistoryMessage = { role: "user" | "model"; parts: Array<{ text: string }> };
 
@@ -18,6 +16,7 @@ export type AgentRunResult = {
   pendingAction?: { toolName: string; args: Record<string, unknown> };
   needsConfirmation?: boolean;
   modelUsed?: string;
+  provider?: string;
 };
 
 export async function runJarvisAgent(
@@ -26,53 +25,35 @@ export async function runJarvisAgent(
   history: HistoryMessage[],
   lastMessage: string,
 ): Promise<AgentRunResult> {
-  const trimmedHistory = history.slice(-10);
-  let chat: ChatSession | null = null;
-  let modelUsed: string = GEMINI_MODELS[0];
-  let response;
-  let lastSendError: Error | null = null;
-
-  for (const modelName of GEMINI_MODELS) {
-    try {
-      const genAI = new GoogleGenerativeAI(GEMINI_KEY);
-      const model: GenerativeModel = genAI.getGenerativeModel({
-        model: modelName,
-        systemInstruction,
-        tools: [{ functionDeclarations: JARVIS_TOOLS }],
-      });
-      chat = model.startChat({ history: trimmedHistory });
-      response = (await chat.sendMessage(lastMessage)).response;
-      modelUsed = modelName;
-      lastSendError = null;
-      break;
-    } catch (e) {
-      lastSendError = e instanceof Error ? e : new Error(String(e));
-      chat = null;
-      if (!isGeminiRetryableError(lastSendError.message)) throw lastSendError;
-      if (lastSendError.message.includes("429")) await new Promise(r => setTimeout(r, 1200));
-    }
+  let chatResult;
+  try {
+    chatResult = await createGeminiToolChat(systemInstruction, JARVIS_TOOLS, history, lastMessage);
+  } catch (e) {
+    throw e instanceof Error ? e : new Error(String(e));
   }
 
-  if (!response || !chat) throw lastSendError ?? new Error("All Gemini models failed");
-
+  const { response, chat, modelUsed, provider } = chatResult;
   const steps: JarvisStep[] = [];
   const actions: JarvisAction[] = [];
   let lastToolResult: unknown;
   let lastToolName: string | undefined;
+  let currentResponse = response;
 
   for (let step = 0; step < MAX_AGENT_STEPS; step++) {
-    const calls = response.functionCalls?.();
+    const calls = currentResponse.functionCalls?.();
     if (!calls?.length) break;
 
     const mutating = calls.find(c => c.name && MUTATING_TOOLS.has(c.name));
     if (mutating?.name) {
       let confirmText = "";
       try {
-        confirmText = response.text();
+        confirmText = currentResponse.text();
       } catch {
         confirmText = "";
       }
-      if (!confirmText) confirmText = buildConfirmText(mutating.name, (mutating.args ?? {}) as Record<string, unknown>);
+      if (!confirmText) {
+        confirmText = buildConfirmText(mutating.name, (mutating.args ?? {}) as Record<string, unknown>);
+      }
 
       return {
         reply: confirmText,
@@ -82,6 +63,7 @@ export async function runJarvisAgent(
         pendingAction: { toolName: mutating.name, args: (mutating.args ?? {}) as Record<string, unknown> },
         needsConfirmation: true,
         modelUsed,
+        provider,
       };
     }
 
@@ -115,7 +97,7 @@ export async function runJarvisAgent(
     if (!functionResponses.length) break;
 
     try {
-      response = (await chat.sendMessage(functionResponses)).response;
+      currentResponse = (await chat.sendMessage(functionResponses)).response;
     } catch {
       break;
     }
@@ -123,7 +105,7 @@ export async function runJarvisAgent(
 
   let reply = "";
   try {
-    reply = response.text();
+    reply = currentResponse.text();
   } catch {
     reply = steps.length
       ? steps.map(s => s.message).join(". ")
@@ -141,6 +123,7 @@ export async function runJarvisAgent(
     toolUsed: lastToolName,
     toolResult: lastToolResult,
     modelUsed,
+    provider,
   };
 }
 

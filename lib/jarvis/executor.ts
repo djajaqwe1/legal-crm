@@ -7,6 +7,9 @@ import { buildDocSystemPrompt } from "@/lib/doc-templates";
 import { getWorkspaceAnalytics } from "@/lib/analytics/workspace-analytics";
 import { applyCaseWorkflow, autoApplyCaseWorkflow, type CaseWorkflowId } from "@/lib/case-workflows";
 import { getLawyerDailyBrief, getOpenTasksForWorkspace } from "@/lib/lawyer-daily";
+import { searchLegalGrounding } from "@/lib/legal-grounding/adilet-search";
+import { generateTextFallback } from "@/lib/llm/router";
+import { FORBIDDEN_TOOLS, TOOL_LABELS } from "./types";
 import type { JarvisAction, JarvisToolResult } from "./types";
 
 const GEMINI_KEY = process.env.GEMINI_API_KEY ?? "";
@@ -49,7 +52,67 @@ export async function executeJarvisTool(
   toolName: string,
   args: Record<string, unknown>,
 ): Promise<JarvisToolResult> {
+  if (FORBIDDEN_TOOLS.has(toolName)) {
+    return {
+      success: false,
+      message: `Операция «${toolName}» запрещена политикой безопасности. Удаление записей только вручную через интерфейс CRM.`,
+    };
+  }
+
   const actions: JarvisAction[] = [];
+
+  if (toolName === "search_adilet") {
+    const { query, limit = 5 } = args as { query: string; limit?: number };
+    const result = await searchLegalGrounding(query, typeof limit === "number" ? limit : 5);
+    return {
+      success: true,
+      data: result,
+      message: result.documents.length
+        ? `Найдено ${result.documents.length} акт(ов) в базе Әділет`
+        : "По запросу в Әділет ничего не найдено — уточните формулировку",
+    };
+  }
+
+  if (toolName === "get_case_context") {
+    const { caseId } = args as { caseId: string };
+    const legalCase = await prisma.legalCase.findFirst({
+      where: { id: caseId, workspaceId },
+      include: {
+        client: true,
+        tasks: { orderBy: { createdAt: "asc" } },
+        documents: { orderBy: { createdAt: "desc" }, take: 10 },
+      },
+    });
+    if (!legalCase) return { success: false, message: "Дело не найдено" };
+
+    const data = {
+      id: legalCase.id,
+      code: legalCase.code,
+      title: legalCase.title,
+      status: caseStatusToRu[legalCase.status as CaseStatus] ?? legalCase.status,
+      kind: legalCase.kind,
+      client: legalCase.client?.name ?? "—",
+      description: legalCase.description,
+      deadline: legalCase.deadline ? new Date(legalCase.deadline).toLocaleDateString("ru-RU") : null,
+      tasks: legalCase.tasks.map(t => ({
+        title: t.title,
+        completed: t.completed,
+        dueDate: t.dueDate ? new Date(t.dueDate).toLocaleDateString("ru-RU") : null,
+      })),
+      documents: legalCase.documents.map(d => ({
+        name: d.name,
+        category: d.category,
+        textPreview: d.extractedText?.slice(0, 1500) ?? null,
+        externalUrl: d.externalUrl,
+      })),
+    };
+
+    return {
+      success: true,
+      data,
+      message: `Контекст дела ${legalCase.code}: ${legalCase.tasks.length} задач, ${legalCase.documents.length} документов`,
+    };
+  }
 
   if (toolName === "get_analytics") {
     const data = await getWorkspaceAnalytics(workspaceId);
@@ -400,37 +463,49 @@ export async function executeJarvisTool(
           ? "petition"
           : "lawsuit";
     const templateHint = buildDocSystemPrompt(typeKey);
+
+    const grounding = await searchLegalGrounding(`${type} ${description}`, 4);
     const docPrompt = `${templateHint}
+
+${grounding.contextBlock || "Предупреждение: нормы из Әділет не найдены — используй только общую структуру без вымышленных статей."}
 
 Ситуация: ${description}
 ${clientName ? `Клиент: ${clientName}` : ""}
 
-Выведи только текст документа.`;
+Выведи только текст документа. Цитируй закон только если он указан в блоке Әділет выше.`;
 
-    if (!GEMINI_KEY) return { success: false, message: "GEMINI_API_KEY не настроен" };
-
-    const genAI = new GoogleGenerativeAI(GEMINI_KEY);
     let docText = "";
-    for (const modelName of GEMINI_MODELS) {
-      try {
-        const model = genAI.getGenerativeModel({ model: modelName });
-        const result = await Promise.race([
-          model.generateContent(docPrompt),
-          new Promise<never>((_, reject) => setTimeout(() => reject(new Error("timeout")), 25000)),
-        ]);
-        docText = (result as Awaited<ReturnType<typeof model.generateContent>>).response.text();
-        if (docText) break;
-      } catch {
-        continue;
+    try {
+      docText = await generateTextFallback(
+        docPrompt,
+        "Ты юрист РК. Пиши только по делу, без галлюцинаций в номерах статей.",
+      );
+    } catch {
+      if (GEMINI_KEY) {
+        const genAI = new GoogleGenerativeAI(GEMINI_KEY);
+        for (const modelName of GEMINI_MODELS) {
+          try {
+            const model = genAI.getGenerativeModel({ model: modelName });
+            const result = await Promise.race([
+              model.generateContent(docPrompt),
+              new Promise<never>((_, reject) => setTimeout(() => reject(new Error("timeout")), 25000)),
+            ]);
+            docText = (result as Awaited<ReturnType<typeof model.generateContent>>).response.text();
+            if (docText) break;
+          } catch {
+            continue;
+          }
+        }
       }
     }
+
     if (!docText) {
       return { success: false, message: "Не удалось сгенерировать документ. Попробуйте через минуту." };
     }
     return {
       success: true,
-      data: { type, text: docText, clientName },
-      message: `${type} готов`,
+      data: { type, text: docText, clientName, legalSources: grounding.sources },
+      message: `${type} готов (источники: ${grounding.sources.length || "уточните нормы вручную"})`,
     };
   }
 
@@ -438,23 +513,28 @@ ${clientName ? `Клиент: ${clientName}` : ""}
 }
 
 export function buildConfirmText(toolName: string, args: Record<string, unknown>): string {
+  const label = TOOL_LABELS[toolName] ?? toolName;
+
   if (toolName === "create_case") {
-    return `Создам дело «${args.title}» для «${args.clientName}»${args.status ? ` (${args.status})` : ""}. Разрешаете?`;
+    return `🔒 Запрос на действие: ${label}\n\nСоздам дело «${args.title}» для «${args.clientName}»${args.status ? ` (${args.status})` : ""}${args.deadline ? `, дедлайн ${args.deadline}` : ""}.\n\nРазрешаете выполнить?`;
   }
   if (toolName === "create_client") {
-    return `Создам клиента «${args.name}». Разрешаете?`;
+    return `🔒 Запрос на действие: ${label}\n\nСоздам клиента «${args.name}»${args.phone ? `, тел. ${args.phone}` : ""}.\n\nРазрешаете?`;
   }
   if (toolName === "update_case") {
-    return `Обновлю дело: ${args.field} → «${args.value}». Разрешаете?`;
+    return `🔒 Запрос на действие: ${label}\n\nИзменю поле «${args.field}» → «${args.value}» (дело id: ${args.caseId}).\n\nРазрешаете?`;
   }
   if (toolName === "add_task") {
-    return `Добавлю задачу «${args.title}» в дело. Разрешаете?`;
+    return `🔒 Запрос на действие: ${label}\n\nДобавлю задачу «${args.title}»${args.dueDate ? ` до ${args.dueDate}` : ""}.\n\nРазрешаете?`;
   }
   if (toolName === "create_contract") {
-    return `Создам договор ${args.number} с «${args.counterparty}». Разрешаете?`;
+    return `🔒 Запрос на действие: ${label}\n\nСоздам договор №${args.number} с «${args.counterparty}».\n\nРазрешаете?`;
   }
   if (toolName === "apply_case_checklist") {
-    return `Применю чеклист «${args.workflowId}» к делу. Разрешаете?`;
+    return `🔒 Запрос на действие: ${label}\n\nПрименю чеклист «${args.workflowId}» к делу.\n\nРазрешаете?`;
   }
-  return `Выполнить «${toolName}»? Разрешаете?`;
+  if (toolName === "generate_document") {
+    return `🔒 Запрос на действие: ${label}\n\nСгенерирую «${args.type}» по описанию: «${String(args.description).slice(0, 120)}…»\n\nРазрешаете?`;
+  }
+  return `🔒 Запрос на действие: ${label}\n\nПараметры: ${JSON.stringify(args, null, 0).slice(0, 200)}\n\nРазрешаете?`;
 }

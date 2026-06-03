@@ -88,6 +88,31 @@ export const JARVIS_TOOLS = [
     },
   },
   {
+    name: "search_adilet",
+    description:
+      "Поиск норм права РК в базе Әділет (adilet.zan.kz). ОБЯЗАТЕЛЬНО перед юридическими выводами, цитатами закона, составлением исков/претензий.",
+    parameters: {
+      type: SchemaType.OBJECT,
+      properties: {
+        query: { type: SchemaType.STRING, description: "Ключевые слова: кодекс, статья, тема спора" },
+        limit: { type: SchemaType.NUMBER, description: "Сколько документов, по умолчанию 5" },
+      },
+      required: ["query"],
+    },
+  },
+  {
+    name: "get_case_context",
+    description:
+      "Полный контекст дела из CRM: описание, задачи, документы (извлечённый текст). Для анализа и подготовки процессуальных документов.",
+    parameters: {
+      type: SchemaType.OBJECT,
+      properties: {
+        caseId: { type: SchemaType.STRING, description: "ID дела (сначала find_case)" },
+      },
+      required: ["caseId"],
+    },
+  },
+  {
     name: "apply_case_checklist",
     description: "Применить типовой чеклист задач к делу (консультация, суд, претензия). Требует подтверждения.",
     parameters: {
@@ -195,7 +220,8 @@ export const JARVIS_TOOLS = [
   },
   {
     name: "generate_document",
-    description: "Сгенерировать юридический документ по шаблону РК.",
+    description:
+      "Сгенерировать юридический документ по шаблону РК. Сначала search_adilet. Требует подтверждения юриста.",
     parameters: {
       type: SchemaType.OBJECT,
       properties: {

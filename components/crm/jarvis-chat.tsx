@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { useJarvisVoice, isVoiceConfirm } from "@/components/crm/use-jarvis-voice";
 import { JARVIS_PRESETS, getPreset, type JarvisPresetId } from "@/lib/jarvis/presets";
 import type { JarvisAction, JarvisStep } from "@/lib/jarvis/types";
+import { TOOL_LABELS } from "@/lib/jarvis/types";
 
 type ToolResult = Record<string, unknown> | unknown[] | null;
 
@@ -122,14 +123,95 @@ function ResultCard({ toolName, data }: { toolName: string; data: ToolResult }) 
     );
   }
   if (toolName === "generate_document" && typeof data === "object" && data && "text" in data) {
-    const d = data as { type: string; text: string };
+    const d = data as { type: string; text: string; legalSources?: Array<{ title: string; url: string }> };
     return (
-      <pre className="mt-3 max-h-64 overflow-y-auto rounded-xl border border-zinc-200/80 bg-zinc-50/50 p-4 text-[13px] leading-relaxed whitespace-pre-wrap dark:border-zinc-800 dark:bg-zinc-900/30">
-        {d.text}
-      </pre>
+      <div className="mt-3 space-y-2">
+        {d.legalSources && d.legalSources.length > 0 && (
+          <div className="flex flex-wrap gap-2">
+            {d.legalSources.map(s => (
+              <a
+                key={s.url}
+                href={s.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="rounded-full bg-emerald-50 px-2.5 py-1 text-[10px] text-emerald-800 hover:underline dark:bg-emerald-900/30 dark:text-emerald-200"
+              >
+                {s.title.slice(0, 40)}…
+              </a>
+            ))}
+          </div>
+        )}
+        <pre className="max-h-64 overflow-y-auto rounded-xl border border-zinc-200/80 bg-zinc-50/50 p-4 text-[13px] leading-relaxed whitespace-pre-wrap dark:border-zinc-800 dark:bg-zinc-900/30">
+          {d.text}
+        </pre>
+      </div>
+    );
+  }
+  if (toolName === "search_adilet" && typeof data === "object" && data && "documents" in data) {
+    const d = data as {
+      documents: Array<{ title: string; url: string; type: string; snippet?: string; articleRef?: string }>;
+    };
+    if (!d.documents?.length) {
+      return <p className="mt-3 text-[13px] text-zinc-500">В базе Әділет по запросу ничего не найдено.</p>;
+    }
+    return (
+      <div className="mt-3 space-y-2">
+        {d.documents.map(doc => (
+          <a
+            key={doc.url}
+            href={doc.url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="block rounded-lg border border-emerald-200/80 bg-emerald-50/50 px-3 py-2 text-[13px] hover:bg-emerald-50 dark:border-emerald-900 dark:bg-emerald-950/20"
+          >
+            <span className="font-medium text-emerald-900 dark:text-emerald-200">{doc.title}</span>
+            <span className="ml-2 text-[10px] text-emerald-700">{doc.type}</span>
+            {doc.articleRef && <p className="mt-1 text-[11px] text-emerald-800">{doc.articleRef}</p>}
+            {doc.snippet && <p className="mt-1 line-clamp-2 text-[11px] text-zinc-600">{doc.snippet}</p>}
+          </a>
+        ))}
+      </div>
     );
   }
   return null;
+}
+
+function ConfirmActionCard({
+  action,
+  onConfirm,
+  onDeny,
+  disabled,
+}: {
+  action: { toolName: string; args: Record<string, unknown> };
+  onConfirm: () => void;
+  onDeny: () => void;
+  disabled?: boolean;
+}) {
+  const label = TOOL_LABELS[action.toolName] ?? action.toolName;
+  const preview = Object.entries(action.args)
+    .filter(([, v]) => v != null && String(v).trim())
+    .map(([k, v]) => `${k}: ${String(v).slice(0, 80)}`)
+    .join(" · ");
+
+  return (
+    <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50/80 px-4 py-3 dark:border-amber-900 dark:bg-amber-950/30">
+      <p className="text-[11px] font-semibold uppercase tracking-wide text-amber-800 dark:text-amber-300">
+        Запрос на действие — требуется разрешение
+      </p>
+      <p className="mt-1 text-[14px] font-medium text-amber-950 dark:text-amber-100">{label}</p>
+      {preview && <p className="mt-1 text-[12px] text-amber-900/80 dark:text-amber-200/80">{preview}</p>}
+      <div className="mt-3 flex gap-2">
+        <Button size="sm" onClick={onConfirm} disabled={disabled} className="h-8 bg-emerald-600 hover:bg-emerald-700">
+          <CheckCircle className="mr-1 h-3.5 w-3.5" />
+          Разрешаю
+        </Button>
+        <Button size="sm" variant="outline" onClick={onDeny} disabled={disabled} className="h-8">
+          <XCircle className="mr-1 h-3.5 w-3.5" />
+          Отмена
+        </Button>
+      </div>
+    </div>
+  );
 }
 
 export function JarvisChat({ sessionId, onSessionActivity, onSessionTitle }: Props) {
@@ -341,13 +423,13 @@ export function JarvisChat({ sessionId, onSessionActivity, onSessionTitle }: Pro
 
   sendRef.current = sendMessage;
 
-  const { isListening, interim, toggleListening } = useJarvisVoice({
-    onTranscript: (text) => {
+  const { isListening, interim, recordingDuration, toggleListening } = useJarvisVoice({
+    onRecordingComplete: (text) => {
       if (pendingRef.current && isVoiceConfirm(text)) {
         void sendRef.current(text, true, pendingRef.current);
-      } else {
-        void sendRef.current(text);
+        return;
       }
+      setInput(prev => (prev.trim() ? `${prev.trim()} ${text}` : text));
     },
   });
 
@@ -407,7 +489,7 @@ export function JarvisChat({ sessionId, onSessionActivity, onSessionTitle }: Pro
                 Чем могу помочь?
               </h2>
               <p className="mt-2 max-w-md text-[15px] leading-relaxed text-zinc-500">
-                Дела, клиенты, аналитика, импорт материалов — выберите действие ниже.
+                Озвучьте задачу голосом или текстом — Джарвис создаст дела, задачи и документы. Нормы права — только из базы Әділет.
               </p>
               <div className="mt-8 flex flex-wrap justify-center gap-2">
                 {SUGGESTIONS.map(s => (
@@ -447,16 +529,12 @@ export function JarvisChat({ sessionId, onSessionActivity, onSessionTitle }: Pro
                 )}
 
                 {msg.needsConfirmation && !msg.confirmed && !msg.denied && msg.pendingAction && pendingAction && (
-                  <div className="mt-3 flex gap-2">
-                    <Button size="sm" onClick={() => void handleConfirm()} disabled={isLoading} className="h-8 bg-emerald-600 hover:bg-emerald-700">
-                      <CheckCircle className="mr-1 h-3.5 w-3.5" />
-                      Разрешаю
-                    </Button>
-                    <Button size="sm" variant="outline" onClick={handleDeny} disabled={isLoading} className="h-8">
-                      <XCircle className="mr-1 h-3.5 w-3.5" />
-                      Отмена
-                    </Button>
-                  </div>
+                  <ConfirmActionCard
+                    action={msg.pendingAction}
+                    onConfirm={() => void handleConfirm()}
+                    onDeny={handleDeny}
+                    disabled={isLoading}
+                  />
                 )}
               </article>
             ))}
@@ -548,8 +626,9 @@ export function JarvisChat({ sessionId, onSessionActivity, onSessionTitle }: Pro
           )}
 
           {isListening && (
-            <p className="mb-2 text-center text-xs text-zinc-500">
-              {interim ? `«${interim}»` : "Слушаю…"}
+            <p className="mb-2 text-center text-xs text-red-600 dark:text-red-400">
+              ● Запись {recordingDuration} — говорите свободно, нажмите микрофон чтобы остановить
+              {interim && <span className="mt-1 block text-zinc-500">«{interim.slice(-120)}»</span>}
             </p>
           )}
           <div className="flex items-end gap-2 rounded-2xl border border-zinc-200 bg-white p-2 shadow-sm dark:border-zinc-700 dark:bg-zinc-900">
@@ -574,7 +653,7 @@ export function JarvisChat({ sessionId, onSessionActivity, onSessionTitle }: Pro
               className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl transition ${
                 isListening ? "bg-red-100 text-red-600" : "text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-800"
               }`}
-              title="Голосовой ввод"
+              title={isListening ? "Остановить запись" : "Голосовой ввод — запись до остановки"}
             >
               {isListening ? <MicOff className="h-4 w-4" /> : <Mic className="h-4 w-4" />}
             </button>
@@ -590,7 +669,7 @@ export function JarvisChat({ sessionId, onSessionActivity, onSessionTitle }: Pro
           <p className="mt-2 text-center text-[11px] text-zinc-400">
             {presetId === "register_case"
               ? "Выберите действие «Зарегистрировать дело», прикрепите файлы и отправьте"
-              : "Enter — отправить · Микрофон — голос (без озвучки ответов)"}
+              : "Enter — отправить · Микрофон — длинная запись (как в ChatGPT), стоп по кнопке · Изменения в CRM — только с вашего «Разрешаю»"}
           </p>
         </div>
       </div>

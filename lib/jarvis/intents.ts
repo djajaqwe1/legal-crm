@@ -10,6 +10,9 @@ export function matchJarvisIntent(text: string): JarvisIntent | null {
   const t = text.toLowerCase().trim();
   if (!t) return null;
 
+  if (/стать|закон|кодекс|адилет|әділет|норм|гпк|гк рк/.test(t)) {
+    return { toolName: "search_adilet", args: { query: text.trim(), limit: 5 } };
+  }
   if (/просроч|опозда|горящ|дедлайн.*(сегодня|истёк|истек)/.test(t)) {
     return { toolName: "get_overdue_cases", args: { limit: 10 } };
   }

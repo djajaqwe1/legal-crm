@@ -30,8 +30,20 @@ export const READ_ONLY_TOOLS = new Set([
   "get_analytics",
   "get_lawyer_daily",
   "get_open_tasks",
+  "get_case_context",
+  "search_adilet",
   "navigate_to",
-  "generate_document",
+]);
+
+/** Опасные операции — не реализованы и заблокированы на уровне executor */
+export const FORBIDDEN_TOOLS = new Set([
+  "delete_case",
+  "delete_client",
+  "delete_contract",
+  "delete_task",
+  "delete_document",
+  "bulk_delete",
+  "drop_database",
 ]);
 
 export const MUTATING_TOOLS = new Set([
@@ -41,7 +53,18 @@ export const MUTATING_TOOLS = new Set([
   "create_contract",
   "add_task",
   "apply_case_checklist",
+  "generate_document",
 ]);
+
+export const TOOL_LABELS: Record<string, string> = {
+  create_case: "Создать дело",
+  create_client: "Создать клиента",
+  update_case: "Обновить дело",
+  create_contract: "Создать договор",
+  add_task: "Добавить задачу",
+  apply_case_checklist: "Применить чеклист",
+  generate_document: "Сгенерировать документ",
+};
 
 export const VOICE_CONFIRM_RE =
   /^(да|ага|ок|okay|yes|разрешаю|подтверждаю|подтверждаю действие|давай|выполняй|сделай|конечно|верно)\b/i;
