@@ -5,6 +5,11 @@ import { buildJarvisSystemPrompt, buildWorkspaceSnapshot } from "@/lib/jarvis/co
 import { runJarvisAgent, executeConfirmedAction } from "@/lib/jarvis/agent";
 import { executeJarvisTool } from "@/lib/jarvis/executor";
 import { matchJarvisIntent, formatToolReply } from "@/lib/jarvis/intents";
+import {
+  parseCaseIntakeRequest,
+  buildIntakeConfirmReply,
+} from "@/lib/jarvis/case-intake";
+import { searchLegalGrounding } from "@/lib/legal-grounding/adilet-search";
 import { READ_ONLY_TOOLS } from "@/lib/jarvis/types";
 import { VOICE_CONFIRM_RE } from "@/lib/jarvis/types";
 import {
@@ -117,6 +122,52 @@ export async function POST(req: Request) {
 
     const snapshot = await buildWorkspaceSnapshot(wid);
     const systemPrompt = buildJarvisSystemPrompt(snapshot, pageContext);
+
+    // Голосовой/текстовый intake: «новое дело для X … нужна претензия»
+    const intake = parseCaseIntakeRequest(lastText);
+    if (intake && !voiceConfirmed) {
+      const grounding = await searchLegalGrounding(intake.adiletQuery, 4);
+      const pendingAction = {
+        toolName: "intake_new_case",
+        args: {
+          clientName: intake.clientName,
+          title: intake.title,
+          description: intake.description,
+          deadline: intake.deadline,
+          documentType: intake.documentType,
+          workflowId: intake.workflowId,
+          adiletQuery: intake.adiletQuery,
+        },
+      };
+      const reply = buildIntakeConfirmReply(intake, grounding.contextBlock, grounding.documents.length);
+
+      await appendJarvisMessages(sessionId, [
+        { role: "user", content: lastText },
+        {
+          role: "assistant",
+          content: reply,
+          metadata: {
+            toolUsed: "search_adilet",
+            toolResult: grounding,
+            needsConfirmation: true,
+          },
+        },
+      ]);
+
+      if (isFirstUserMessage && session.title === "Новый чат") {
+        void autoTitleSession(sessionId, intake.title);
+      }
+
+      return NextResponse.json({
+        reply,
+        toolUsed: "search_adilet",
+        toolResult: grounding,
+        pendingAction,
+        needsConfirmation: true,
+        sessionTitle: isFirstUserMessage ? intake.title.slice(0, 48) : undefined,
+        sessionId,
+      });
+    }
 
     const intent = matchJarvisIntent(lastText);
     if (intent && READ_ONLY_TOOLS.has(intent.toolName)) {

@@ -219,6 +219,27 @@ export const JARVIS_TOOLS = [
     },
   },
   {
+    name: "intake_new_case",
+    description:
+      "Полный intake по голосовой заявке: создать дело, чеклист, черновик претензии/иска. Один запрос юриста — вся рутина. Требует подтверждения.",
+    parameters: {
+      type: SchemaType.OBJECT,
+      properties: {
+        clientName: { type: SchemaType.STRING },
+        title: { type: SchemaType.STRING },
+        description: { type: SchemaType.STRING },
+        deadline: { type: SchemaType.STRING, description: "YYYY-MM-DD" },
+        documentType: { type: SchemaType.STRING, enum: ["претензия", "иск", "ходатайство"] },
+        workflowId: {
+          type: SchemaType.STRING,
+          enum: ["pretension_flow", "court_first_instance", "consultation_intake"],
+        },
+        adiletQuery: { type: SchemaType.STRING },
+      },
+      required: ["clientName", "title", "description"],
+    },
+  },
+  {
     name: "generate_document",
     description:
       "Сгенерировать юридический документ по шаблону РК. Сначала search_adilet. Требует подтверждения юриста.",

@@ -1,5 +1,6 @@
 /** Прямой маршрут частых запросов — работает даже при сбое Gemini. */
 import { formatLawyerDailyReply, type LawyerDailyBrief } from "@/lib/lawyer-daily";
+import { isOperationalRequest } from "./case-intake";
 
 export type JarvisIntent = {
   toolName: string;
@@ -10,7 +11,14 @@ export function matchJarvisIntent(text: string): JarvisIntent | null {
   const t = text.toLowerCase().trim();
   if (!t) return null;
 
-  if (/стать|закон|кодекс|адилет|әділет|норм|гпк|гк рк/.test(t)) {
+  // Составные задачи (новое дело, претензия, дедлайн) — только через агента / intake workflow
+  if (isOperationalRequest(text)) return null;
+
+  // Только чистый справочный запрос по закону — без создания дел и документов
+  if (
+    /^(найди|поиск|что говорит|какая статья|какой закон|покажи норм)/.test(t) ||
+    (/стать[яи]\s+\d|кодекс|адилет|әділет|гпк|гк рк/.test(t) && !/дел|претенз|иск|создай|клиент/.test(t))
+  ) {
     return { toolName: "search_adilet", args: { query: text.trim(), limit: 5 } };
   }
   if (/просроч|опозда|горящ|дедлайн.*(сегодня|истёк|истек)/.test(t)) {
@@ -90,6 +98,15 @@ export function formatToolReply(
     const rows = data as Array<{ caseCode: string; title: string; dueDate?: string | null }>;
     if (!rows.length) return "Открытых задач нет.";
     return `Открытые задачи (${rows.length}):\n${rows.map(r => `• ${r.caseCode}: ${r.title}${r.dueDate ? ` — ${r.dueDate}` : ""}`).join("\n")}`;
+  }
+
+  if (toolName === "search_adilet" && data && typeof data === "object" && "documents" in data) {
+    const d = data as { documents: Array<{ title: string; articleRef?: string }> };
+    if (!d.documents?.length) return "По запросу в базе Әділет ничего не найдено.";
+    const list = d.documents
+      .map(doc => `• ${doc.title}${doc.articleRef ? ` (${doc.articleRef})` : ""}`)
+      .join("\n");
+    return `Найдено в Әділет:\n${list}`;
   }
 
   return message || "Готово.";

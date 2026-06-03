@@ -451,6 +451,79 @@ export async function executeJarvisTool(
     };
   }
 
+  if (toolName === "intake_new_case") {
+    const {
+      clientName,
+      title,
+      description,
+      deadline,
+      documentType,
+      workflowId = "pretension_flow",
+      adiletQuery,
+    } = args as {
+      clientName: string;
+      title: string;
+      description: string;
+      deadline?: string;
+      documentType?: string;
+      workflowId?: CaseWorkflowId;
+      adiletQuery?: string;
+    };
+
+    const createResult = await executeJarvisTool(workspaceId, "create_case", {
+      title,
+      clientName,
+      status: "Новый",
+      deadline,
+      description,
+    });
+    if (!createResult.success || !createResult.data) {
+      return createResult;
+    }
+
+    const caseId = (createResult.data as { id: string }).id;
+    const caseCode = (createResult.data as { code?: string }).code;
+    if (createResult.actions) actions.push(...createResult.actions);
+
+    let checklistMsg = "";
+    if (workflowId) {
+      const checklist = await applyCaseWorkflow(caseId, workflowId, { workspaceId });
+      checklistMsg =
+        checklist.created > 0
+          ? ` Добавлено ${checklist.created} задач по чеклисту.`
+          : " Чеклист уже был применён.";
+    }
+
+    let documentData: unknown = null;
+    let documentMsg = "";
+    if (documentType) {
+      const docResult = await executeJarvisTool(workspaceId, "generate_document", {
+        type: documentType,
+        description,
+        clientName,
+      });
+      if (docResult.success) {
+        documentData = docResult.data;
+        documentMsg = ` Черновик «${documentType}» готов.`;
+      } else {
+        documentMsg = ` Не удалось сгенерировать документ: ${docResult.message}`;
+      }
+    }
+
+    const grounding = adiletQuery ? await searchLegalGrounding(adiletQuery, 4) : null;
+
+    return {
+      success: true,
+      data: {
+        case: createResult.data,
+        document: documentData,
+        legalSources: grounding?.sources ?? [],
+      },
+      message: `Готово: дело ${caseCode ?? caseId} для «${clientName}».${checklistMsg}${documentMsg}`,
+      actions,
+    };
+  }
+
   if (toolName === "generate_document") {
     const { type, description, clientName } = args as {
       type: string; description: string; clientName?: string;
@@ -535,6 +608,12 @@ export function buildConfirmText(toolName: string, args: Record<string, unknown>
   }
   if (toolName === "generate_document") {
     return `🔒 Запрос на действие: ${label}\n\nСгенерирую «${args.type}» по описанию: «${String(args.description).slice(0, 120)}…»\n\nРазрешаете?`;
+  }
+  if (toolName === "intake_new_case") {
+    const deadlineRu = args.deadline
+      ? new Date(String(args.deadline)).toLocaleDateString("ru-RU")
+      : "не указан";
+    return `🔒 Полный intake дела\n\n• Клиент: «${args.clientName}»\n• Дело: «${args.title}»\n• Дедлайн: ${deadlineRu}${args.documentType ? `\n• Документ: ${args.documentType}` : ""}\n\nСоздам дело, чеклист и черновик документа.\n\nРазрешаете?`;
   }
   return `🔒 Запрос на действие: ${label}\n\nПараметры: ${JSON.stringify(args, null, 0).slice(0, 200)}\n\nРазрешаете?`;
 }

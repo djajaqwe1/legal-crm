@@ -122,6 +122,30 @@ function ResultCard({ toolName, data }: { toolName: string; data: ToolResult }) 
       </div>
     );
   }
+  if (toolName === "intake_new_case" && typeof data === "object" && data && "case" in data) {
+    const d = data as {
+      case: { code?: string; title?: string };
+      document?: { type?: string; text?: string; legalSources?: Array<{ title: string; url: string }> } | null;
+      legalSources?: Array<{ title: string; url: string }>;
+    };
+    return (
+      <div className="mt-3 space-y-2">
+        {d.case.code && (
+          <p className="text-[13px] font-medium text-emerald-800 dark:text-emerald-200">
+            Дело {d.case.code} — {d.case.title}
+          </p>
+        )}
+        {d.document?.text && (
+          <>
+            <p className="text-[11px] uppercase tracking-wide text-zinc-400">Черновик {d.document.type ?? "документа"}</p>
+            <pre className="max-h-64 overflow-y-auto rounded-xl border border-zinc-200/80 bg-zinc-50/50 p-4 text-[13px] leading-relaxed whitespace-pre-wrap dark:border-zinc-800 dark:bg-zinc-900/30">
+              {d.document.text}
+            </pre>
+          </>
+        )}
+      </div>
+    );
+  }
   if (toolName === "generate_document" && typeof data === "object" && data && "text" in data) {
     const d = data as { type: string; text: string; legalSources?: Array<{ title: string; url: string }> };
     return (
