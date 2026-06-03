@@ -10,6 +10,15 @@ function storageBase(): string {
   return base;
 }
 
+function supabaseAuthHeaders(extra?: Record<string, string>): Record<string, string> {
+  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
+  return {
+    Authorization: `Bearer ${serviceKey}`,
+    apikey: serviceKey,
+    ...extra,
+  };
+}
+
 /** Загружает файл в Supabase Storage, возвращает публичный или подписанный URL. */
 export async function uploadToSupabaseStorage(
   objectKey: string,
@@ -22,11 +31,10 @@ export async function uploadToSupabaseStorage(
 
   const uploadRes = await fetch(uploadUrl, {
     method: "POST",
-    headers: {
-      Authorization: `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY}`,
+    headers: supabaseAuthHeaders({
       "Content-Type": contentType || "application/octet-stream",
       "x-upsert": "true",
-    },
+    }),
     body: new Uint8Array(buffer),
   });
 
@@ -43,10 +51,7 @@ export async function uploadToSupabaseStorage(
   const signUrl = `${storageBase()}/storage/v1/object/sign/${BUCKET}/${key}`;
   const signRes = await fetch(signUrl, {
     method: "POST",
-    headers: {
-      Authorization: `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY}`,
-      "Content-Type": "application/json",
-    },
+    headers: supabaseAuthHeaders({ "Content-Type": "application/json" }),
     body: JSON.stringify({ expiresIn: 60 * 60 * 24 * 365 }),
   });
 
