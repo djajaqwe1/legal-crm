@@ -5,8 +5,9 @@ import {
   CaseKind,
   CaseOutcome,
   CourtInstance,
-  type CaseStatus,
+  CaseStatus,
 } from "@/lib/generated-client";
+import { applyCaseWorkflow, autoApplyCaseWorkflow } from "@/lib/case-workflows";
 import { resolveWorkspaceId } from "@/lib/workspace-scope";
 
 type Params = {
@@ -146,6 +147,10 @@ export async function PATCH(request: Request, { params }: Params) {
       where: { id },
       data,
     });
+
+    if (data.status === CaseStatus.COURT && existing.status !== CaseStatus.COURT) {
+      await autoApplyCaseWorkflow(updated.id, updated.kind, updated.courtInstance, wid);
+    }
 
     return NextResponse.json(updated);
   } catch {

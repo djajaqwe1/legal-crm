@@ -205,6 +205,7 @@ export type CaseAssistantContext = {
   code: string;
   title: string;
   status: string;
+  kind?: CaseKind;
   deadline: string;
   client: string;
   description?: string | null;
@@ -647,6 +648,7 @@ export async function getCaseAssistantContext(
       code: item.code,
       title: item.title,
       status: statusMap[item.status],
+      kind: item.kind,
       deadline: item.deadline
         ? item.deadline.toLocaleDateString("ru-RU")
         : "Без срока",

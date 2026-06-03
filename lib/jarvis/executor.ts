@@ -5,6 +5,8 @@ import { CaseStatus, ContractStatus } from "@/lib/generated-client";
 import { GEMINI_MODELS } from "@/lib/gemini-models";
 import { buildDocSystemPrompt } from "@/lib/doc-templates";
 import { getWorkspaceAnalytics } from "@/lib/analytics/workspace-analytics";
+import { applyCaseWorkflow, autoApplyCaseWorkflow, type CaseWorkflowId } from "@/lib/case-workflows";
+import { getLawyerDailyBrief, getOpenTasksForWorkspace } from "@/lib/lawyer-daily";
 import type { JarvisAction, JarvisToolResult } from "./types";
 
 const GEMINI_KEY = process.env.GEMINI_API_KEY ?? "";
@@ -55,6 +57,38 @@ export async function executeJarvisTool(
       success: true,
       data,
       message: `Дел: ${data.totals.cases}, консультаций: ${data.totals.consultations}, судебных: ${data.totals.courtCases}, документов: ${data.totals.documents}. Оплачено: ${data.totals.paymentsTotal.toLocaleString("ru-RU")} ₸`,
+    };
+  }
+
+  if (toolName === "get_lawyer_daily") {
+    const { lawyerName } = args as { lawyerName?: string };
+    const data = await getLawyerDailyBrief(workspaceId, lawyerName);
+    return { success: true, data, message: data.summary };
+  }
+
+  if (toolName === "get_open_tasks") {
+    const { limit = 15 } = args as { limit?: number };
+    const data = await getOpenTasksForWorkspace(workspaceId, typeof limit === "number" ? limit : 15);
+    return {
+      success: true,
+      data,
+      message: data.length ? `Открытых задач: ${data.length}` : "Открытых задач нет",
+    };
+  }
+
+  if (toolName === "apply_case_checklist") {
+    const { caseId, workflowId } = args as { caseId: string; workflowId: CaseWorkflowId };
+    const result = await applyCaseWorkflow(caseId, workflowId, { workspaceId });
+    actions.push({ type: "navigate", path: `/admin/cases/${caseId}` });
+    actions.push({ type: "refresh" });
+    return {
+      success: true,
+      data: result,
+      message:
+        result.created > 0
+          ? `Добавлено ${result.created} задач по чеклисту`
+          : "Все задачи чеклиста уже были в деле",
+      actions,
     };
   }
 
@@ -267,12 +301,13 @@ export async function executeJarvisTool(
         deadline: deadlineDate,
       },
     });
+    await autoApplyCaseWorkflow(newCase.id, newCase.kind, null, workspaceId);
     actions.push({ type: "navigate", path: `/admin/cases/${newCase.id}`, label: newCase.code });
     actions.push({ type: "refresh" });
     return {
       success: true,
       data: { id: newCase.id, code: newCase.code, title: newCase.title },
-      message: `Дело «${title}» (${code}) создано для «${client.name}»`,
+      message: `Дело «${title}» (${code}) создано для «${client.name}». Добавлен типовой чеклист задач.`,
       actions,
     };
   }
@@ -417,6 +452,9 @@ export function buildConfirmText(toolName: string, args: Record<string, unknown>
   }
   if (toolName === "create_contract") {
     return `Создам договор ${args.number} с «${args.counterparty}». Разрешаете?`;
+  }
+  if (toolName === "apply_case_checklist") {
+    return `Применю чеклист «${args.workflowId}» к делу. Разрешаете?`;
   }
   return `Выполнить «${toolName}»? Разрешаете?`;
 }

@@ -12,6 +12,7 @@ import { CaseStatusControl } from "@/components/crm/case-status-control";
 import { CaseObjectControl } from "@/components/crm/case-object-control";
 import { CaseRelationsControl } from "@/components/crm/case-relations-control";
 import { CaseCourtPanel } from "@/components/crm/case-court-panel";
+import { CaseWorkflowControl } from "@/components/crm/case-workflow-control";
 import { CASE_KIND_LABELS } from "@/lib/case-tree";
 import { outcomeLabel } from "@/lib/case-outcome";
 import { CaseKind } from "@/lib/generated-client";
@@ -144,6 +145,14 @@ export default async function CaseDetailPage({ params }: PageProps) {
                     currentObjectId={caseData.objectId}
                   />
                 </div>
+              </div>
+
+              <div className="space-y-2 sm:col-span-2">
+                <CaseWorkflowControl
+                  caseId={caseData.id}
+                  kind={caseData.kind}
+                  taskCount={caseData.tasks.length}
+                />
               </div>
 
               <div className="space-y-2 sm:col-span-2">

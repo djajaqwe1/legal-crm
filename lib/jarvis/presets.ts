@@ -3,7 +3,9 @@ export type JarvisPresetId =
   | "register_case"
   | "consultation"
   | "analytics"
-  | "report_employee";
+  | "report_employee"
+  | "daily_routine"
+  | "pretension";
 
 export type JarvisPreset = {
   id: JarvisPresetId;
@@ -52,6 +54,21 @@ export const JARVIS_PRESETS: JarvisPreset[] = [
     description: "Сводка по делам, документам, консультациям",
     placeholder: "ФИО юриста или «все»",
     starterPrompt: "Сформируй отчёт эффективности юриста по делам в CRM.",
+  },
+  {
+    id: "daily_routine",
+    label: "Мой рабочий день",
+    description: "Задачи на сегодня, просрочки, дедлайны",
+    placeholder: "ФИО юриста или оставьте пустым",
+    starterPrompt: "Покажи мой рабочий день: просрочки, задачи на сегодня, дедлайны дел.",
+  },
+  {
+    id: "pretension",
+    label: "Досудебная претензия",
+    description: "Чеклист претензии + черновик документа",
+    placeholder: "Опишите спор и контрагента…",
+    starterPrompt:
+      "Помоги с досудебной претензией: найди дело или создай задачи по чеклисту претензии, предложи структуру документа.",
   },
 ];
 

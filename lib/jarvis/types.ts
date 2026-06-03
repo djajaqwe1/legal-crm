@@ -28,6 +28,8 @@ export const READ_ONLY_TOOLS = new Set([
   "get_overdue_cases",
   "find_case",
   "get_analytics",
+  "get_lawyer_daily",
+  "get_open_tasks",
   "navigate_to",
   "generate_document",
 ]);
@@ -38,6 +40,7 @@ export const MUTATING_TOOLS = new Set([
   "update_case",
   "create_contract",
   "add_task",
+  "apply_case_checklist",
 ]);
 
 export const VOICE_CONFIRM_RE =

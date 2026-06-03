@@ -15,6 +15,7 @@ import { Users, FileText, Briefcase, ChevronRight, ArrowUpRight, Calendar, Alert
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { AiInsightCard } from "@/components/crm/ai-insight-card";
+import { LawyerDailyPanel } from "@/components/crm/lawyer-daily-panel";
 import { WorkspaceAnalyticsSection } from "@/components/crm/workspace-analytics-section";
 import type { DashboardStats } from "@/lib/crm-repository";
 
@@ -132,6 +133,9 @@ export default async function Home() {
         <Link href="/admin" className="inline-flex items-center gap-1.5 rounded-full bg-gradient-to-r from-blue-500 to-violet-600 px-4 py-2 text-xs font-bold text-white shadow-md hover:opacity-90 transition-opacity">
           ✦ Открыть Джарвис
         </Link>
+        <Link href="/admin" className="inline-flex items-center gap-1.5 rounded-full border border-emerald-200 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-900/20 px-4 py-2 text-xs font-medium text-emerald-700 dark:text-emerald-300 hover:bg-emerald-100 transition-colors">
+          📋 Мой рабочий день
+        </Link>
         <Link href="/admin/cases?status=В работе" className="inline-flex items-center gap-1.5 rounded-full border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-4 py-2 text-xs font-medium text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors">
           ⚡ Дела в работе
         </Link>
@@ -148,6 +152,8 @@ export default async function Home() {
           👥 Все клиенты
         </Link>
       </div>
+
+      <LawyerDailyPanel />
 
       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4 mb-8">
         <Link href="/admin/cases" className="block group">

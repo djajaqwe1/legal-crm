@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { CaseKind, CaseStatus } from "@/lib/generated-client";
 import { prisma } from "@/lib/prisma";
+import { applyCaseWorkflow, autoApplyCaseWorkflow } from "@/lib/case-workflows";
 import { resolveWorkspaceId } from "@/lib/workspace-scope";
 
 type Params = { params: Promise<{ id: string }> };
@@ -64,10 +65,14 @@ export async function POST(request: Request, { params }: Params) {
       },
     });
 
+    await applyCaseWorkflow(courtCase.id, "consultation_to_court", { workspaceId: wid });
+    await autoApplyCaseWorkflow(courtCase.id, CaseKind.COURT, null, wid);
+
     return NextResponse.json(
       {
         case: courtCase,
         navigate: `/admin/cases/${courtCase.id}`,
+        tasksAdded: true,
       },
       { status: 201 },
     );

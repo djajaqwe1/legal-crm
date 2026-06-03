@@ -68,6 +68,48 @@ export const JARVIS_TOOLS = [
     parameters: { type: SchemaType.OBJECT, properties: {} },
   },
   {
+    name: "get_lawyer_daily",
+    description: "Рабочий день юриста: просрочки, задачи на сегодня, дедлайны дел на неделю.",
+    parameters: {
+      type: SchemaType.OBJECT,
+      properties: {
+        lawyerName: { type: SchemaType.STRING, description: "ФИО юриста или пусто для всех" },
+      },
+    },
+  },
+  {
+    name: "get_open_tasks",
+    description: "Все открытые задачи по делам в CRM.",
+    parameters: {
+      type: SchemaType.OBJECT,
+      properties: {
+        limit: { type: SchemaType.NUMBER },
+      },
+    },
+  },
+  {
+    name: "apply_case_checklist",
+    description: "Применить типовой чеклист задач к делу (консультация, суд, претензия). Требует подтверждения.",
+    parameters: {
+      type: SchemaType.OBJECT,
+      properties: {
+        caseId: { type: SchemaType.STRING },
+        workflowId: {
+          type: SchemaType.STRING,
+          enum: [
+            "consultation_intake",
+            "court_first_instance",
+            "court_appeal",
+            "project_documents",
+            "consultation_to_court",
+            "pretension_flow",
+          ],
+        },
+      },
+      required: ["caseId", "workflowId"],
+    },
+  },
+  {
     name: "navigate_to",
     description: "Открыть раздел CRM или карточку. Выполняется сразу — переводит юриста на нужный экран.",
     parameters: {

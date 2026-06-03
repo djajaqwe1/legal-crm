@@ -3,12 +3,13 @@ import { GoogleGenerativeAI } from "@google/generative-ai";
 import { prisma } from "@/lib/prisma";
 import { resolveWorkspaceId } from "@/lib/workspace-scope";
 import { GEMINI_MODELS, formatGeminiUserError } from "@/lib/gemini-models";
-import { CaseKind, CaseStatus, ClientCategory } from "@/lib/generated-client";
+import { CaseKind, CaseStatus, ClientCategory, CourtInstance } from "@/lib/generated-client";
 import { ruToCaseStatus } from "@/lib/case-status";
 import { appendJarvisMessages } from "@/lib/jarvis/sessions";
 import { addDocument } from "@/lib/crm-repository";
 import { extractDocumentText, extractionSummary } from "@/lib/document-extract";
 import { storeCaseFile } from "@/lib/storage/document-storage";
+import { autoApplyCaseWorkflow } from "@/lib/case-workflows";
 
 export const dynamic = "force-dynamic";
 
@@ -166,7 +167,16 @@ ${comment ? `Комментарий юриста: ${comment}` : ""}`;
       });
     }
 
-    const reply = `Зарегистрировано дело **${newCase.code}** — «${newCase.title}» для «${client.name}». Загружено файлов: ${files.length}. Откройте карточку для проверки и правок.`;
+    await autoApplyCaseWorkflow(
+      newCase.id,
+      kind,
+      Object.values(CourtInstance).includes(parsed.courtInstance as CourtInstance)
+        ? (parsed.courtInstance as CourtInstance)
+        : null,
+      wid,
+    );
+
+    const reply = `Зарегистрировано дело **${newCase.code}** — «${newCase.title}» для «${client.name}». Загружено файлов: ${files.length}. Добавлен типовой чеклист задач. Откройте карточку для проверки.`;
 
     await appendJarvisMessages(sessionId, [
       { role: "user", content: comment || `Импорт материалов: ${files.map(f => f.name).join(", ")}` },

@@ -1,4 +1,6 @@
 /** Прямой маршрут частых запросов — работает даже при сбое Gemini. */
+import { formatLawyerDailyReply, type LawyerDailyBrief } from "@/lib/lawyer-daily";
+
 export type JarvisIntent = {
   toolName: string;
   args: Record<string, unknown>;
@@ -10,6 +12,12 @@ export function matchJarvisIntent(text: string): JarvisIntent | null {
 
   if (/просроч|опозда|горящ|дедлайн.*(сегодня|истёк|истек)/.test(t)) {
     return { toolName: "get_overdue_cases", args: { limit: 10 } };
+  }
+  if (/рабоч(ий|его) день|на сегодня|мои задачи|что (делать|на) сегодня|план на день/.test(t)) {
+    return { toolName: "get_lawyer_daily", args: {} };
+  }
+  if (/открыт(ые|ых) задач|все задачи|список задач/.test(t)) {
+    return { toolName: "get_open_tasks", args: { limit: 15 } };
   }
   if (/аналитик|отч[её]т|выигрыш|исход|эффективност|консультац.*суд/.test(t)) {
     return { toolName: "get_analytics", args: {} };
@@ -69,6 +77,16 @@ export function formatToolReply(
       totals: { cases: number; consultations: number; courtCases: number; documents: number; paymentsTotal: number };
     };
     return `Аналитика:\n• Всего дел: ${d.totals.cases}\n• Консультации: ${d.totals.consultations}\n• Судебные: ${d.totals.courtCases}\n• Документов: ${d.totals.documents}\n• Платежи: ${d.totals.paymentsTotal.toLocaleString("ru-RU")} ₸`;
+  }
+
+  if (toolName === "get_lawyer_daily" && data && typeof data === "object" && "summary" in data) {
+    return formatLawyerDailyReply(data as LawyerDailyBrief);
+  }
+
+  if (toolName === "get_open_tasks" && Array.isArray(data)) {
+    const rows = data as Array<{ caseCode: string; title: string; dueDate?: string | null }>;
+    if (!rows.length) return "Открытых задач нет.";
+    return `Открытые задачи (${rows.length}):\n${rows.map(r => `• ${r.caseCode}: ${r.title}${r.dueDate ? ` — ${r.dueDate}` : ""}`).join("\n")}`;
   }
 
   return message || "Готово.";

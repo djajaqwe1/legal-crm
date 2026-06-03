@@ -2,6 +2,8 @@ import { GoogleGenerativeAI } from "@google/generative-ai";
 import { GEMINI_MODELS } from "@/lib/gemini-models";
 import type { CaseAssistantContext } from "@/lib/crm-repository";
 import { executeCaseTool } from "./executor";
+import { autoApplyCaseWorkflow, applyCaseWorkflow, resolveDefaultWorkflow } from "@/lib/case-workflows";
+import { CaseKind } from "@/lib/generated-client";
 
 export function matchCaseTaskIntent(text: string): boolean {
   const t = text.toLowerCase();
@@ -15,6 +17,33 @@ export async function autoGenerateCaseTasks(
   context: CaseAssistantContext,
   userMessage: string,
 ): Promise<{ reply: string; tasksCreated: number; taskTitles: string[] }> {
+  const kind = context.kind ?? CaseKind.COURT;
+
+  if (context.tasks.length === 0) {
+    const workflow = await autoApplyCaseWorkflow(context.caseId, kind, null, workspaceId);
+    if (workflow && workflow.created > 0) {
+      const list = workflow.titles.map((t) => `• ${t}`).join("\n");
+      return {
+        reply: `Применил типовой чеклист (${workflow.created} задач) для дела ${context.code}:\n\n${list}\n\nМожете уточнить — добавлю ещё через AI.`,
+        tasksCreated: workflow.created,
+        taskTitles: workflow.titles,
+      };
+    }
+  }
+
+  if (/чеклист|типов(ой|ые) задач|стандартн/.test(userMessage.toLowerCase())) {
+    const wfId = resolveDefaultWorkflow(kind);
+    const applied = await applyCaseWorkflow(context.caseId, wfId, { workspaceId });
+    if (applied.created > 0) {
+      const list = applied.titles.map((t) => `• ${t}`).join("\n");
+      return {
+        reply: `Чеклист применён — ${applied.created} новых задач:\n\n${list}`,
+        tasksCreated: applied.created,
+        taskTitles: applied.titles,
+      };
+    }
+  }
+
   const docTexts = context.documents
     .map(d => (d.extractedText ? `${d.name}: ${d.extractedText.slice(0, 3000)}` : d.name))
     .join("\n");

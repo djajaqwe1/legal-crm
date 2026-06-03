@@ -2,6 +2,7 @@ import { CaseKind, CaseStatus } from "@/lib/generated-client";
 import { NextResponse } from "next/server";
 import { ruToCaseStatus } from "@/lib/case-status";
 import { prisma } from "@/lib/prisma";
+import { autoApplyCaseWorkflow } from "@/lib/case-workflows";
 import { resolveWorkspaceId } from "@/lib/workspace-scope";
 
 function toStatus(value?: string): CaseStatus {
@@ -90,7 +91,15 @@ export async function POST(request: Request) {
       },
     });
 
-    return NextResponse.json(legalCase, { status: 201 });
+    const workflow = await autoApplyCaseWorkflow(legalCase.id, kind, null, wid);
+
+    return NextResponse.json(
+      {
+        ...legalCase,
+        workflowApplied: workflow?.created ?? 0,
+      },
+      { status: 201 },
+    );
   } catch {
     return NextResponse.json(
       { error: "Failed to create case. Check database connection." },
