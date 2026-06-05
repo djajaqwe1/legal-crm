@@ -81,6 +81,17 @@ async function runInstantVoiceTool(
     };
   }
 
+  if (toolName === "overdue_alert") {
+    const limit = typeof args.limit === "number" ? args.limit : 10;
+    const result = await executeJarvisTool(workspaceId, "get_overdue_cases", { limit });
+    return {
+      reply: formatToolReply("get_overdue_cases", result.data, result.message),
+      toolUsed: "get_overdue_cases",
+      toolResult: result.data,
+      actions: result.actions ?? [],
+    };
+  }
+
   if (toolName === "case_brief") {
     const resolved = await resolveVoiceCaseArgs(workspaceId, args);
     if ("error" in resolved) {

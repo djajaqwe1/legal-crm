@@ -11,7 +11,8 @@ import {
   speakJarvis,
 } from "@/components/crm/use-jarvis-voice";
 import { isVoiceDeny } from "@/lib/jarvis/types";
-import { matchRegisterCaseVoice } from "@/lib/jarvis/voice-commands";
+import { matchRegisterCaseVoice, parseAttachToCaseVoice } from "@/lib/jarvis/voice-commands";
+import { extractCaseHintFromPageContext } from "@/lib/jarvis/case-resolve";
 
 type PendingAction = { toolName: string; args: Record<string, unknown> };
 
@@ -188,6 +189,14 @@ export function PageAssistantPanel({ pageContext }: Props) {
     if (matchRegisterCaseVoice(t)) {
       speakJarvis("Открываю режим регистрации дела. Прикрепите PDF файлы.");
       router.push("/admin?preset=register_case");
+      setOpen(false);
+      return;
+    }
+
+    const attachQ = parseAttachToCaseVoice(t, extractCaseHintFromPageContext(pageContext) ?? undefined);
+    if (attachQ) {
+      speakJarvis(`Открываю прикрепление файлов к делу ${attachQ}.`);
+      router.push(`/admin?preset=attach_documents&case=${encodeURIComponent(attachQ)}`);
       setOpen(false);
       return;
     }

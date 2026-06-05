@@ -1,6 +1,7 @@
 export type JarvisPresetId =
   | "chat"
   | "register_case"
+  | "attach_documents"
   | "consultation"
   | "analytics"
   | "report_employee"
@@ -33,6 +34,14 @@ export const JARVIS_PRESETS: JarvisPreset[] = [
     placeholder: "Комментарий к материалам (необязательно)…",
     acceptsFiles: true,
     fileHint: "Решения, иски, договоры, переписка (.txt, .pdf до 10 МБ)",
+  },
+  {
+    id: "attach_documents",
+    label: "Прикрепить к делу",
+    description: "Загрузите файлы в существующую карточку дела",
+    placeholder: "Комментарий (необязательно)…",
+    acceptsFiles: true,
+    fileHint: "PDF, Word, фото — сохранятся в документы дела",
   },
   {
     id: "consultation",

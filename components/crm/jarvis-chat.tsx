@@ -10,7 +10,8 @@ import { DownloadDocxButton } from "@/components/crm/download-docx-button";
 import { useJarvisVoice, isVoiceConfirm, speakJarvis } from "@/components/crm/use-jarvis-voice";
 import { isVoiceDeny } from "@/lib/jarvis/types";
 import { JARVIS_PRESETS, getPreset, PRESET_FAST_COMMAND, type JarvisPresetId } from "@/lib/jarvis/presets";
-import { VOICE_COMMAND_EXAMPLES, matchRegisterCaseVoice } from "@/lib/jarvis/voice-commands";
+import { VOICE_COMMAND_EXAMPLES, matchRegisterCaseVoice, parseAttachToCaseVoice } from "@/lib/jarvis/voice-commands";
+import { extractCaseHintFromPageContext } from "@/lib/jarvis/case-resolve";
 import type { JarvisAction, JarvisStep } from "@/lib/jarvis/types";
 import { TOOL_LABELS } from "@/lib/jarvis/types";
 
@@ -33,6 +34,7 @@ type Message = {
 type Props = {
   sessionId: string;
   initialPreset?: JarvisPresetId;
+  initialCaseQuery?: string;
   pageContext?: string;
   onSessionActivity?: () => void;
   onSessionTitle?: (title: string) => void;
@@ -272,7 +274,14 @@ function ConfirmActionCard({
   );
 }
 
-export function JarvisChat({ sessionId, initialPreset, pageContext, onSessionActivity, onSessionTitle }: Props) {
+export function JarvisChat({
+  sessionId,
+  initialPreset,
+  initialCaseQuery,
+  pageContext,
+  onSessionActivity,
+  onSessionTitle,
+}: Props) {
   const router = useRouter();
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
@@ -283,6 +292,7 @@ export function JarvisChat({ sessionId, initialPreset, pageContext, onSessionAct
   const [loadingHint, setLoadingHint] = useState("Думаю…");
   const [loadingHistory, setLoadingHistory] = useState(true);
   const [pendingAction, setPendingAction] = useState<Message["pendingAction"]>(undefined);
+  const [attachCaseQuery, setAttachCaseQuery] = useState(initialCaseQuery ?? "");
   const fileInputRef = useRef<HTMLInputElement>(null);
   const inputRef = useRef("");
   const endRef = useRef<HTMLDivElement>(null);
@@ -305,6 +315,7 @@ export function JarvisChat({ sessionId, initialPreset, pageContext, onSessionAct
       setPendingAction(undefined);
       setFiles([]);
       setPresetId(initialPreset ?? "chat");
+      setAttachCaseQuery(initialCaseQuery ?? "");
       try {
         const res = await fetch(`/api/ai/jarvis/sessions/${sessionId}`);
         if (!res.ok) throw new Error("load failed");
@@ -332,7 +343,7 @@ export function JarvisChat({ sessionId, initialPreset, pageContext, onSessionAct
         setLoadingHistory(false);
       }
     })();
-  }, [sessionId, initialPreset]);
+  }, [sessionId, initialPreset, initialCaseQuery]);
 
   const applyActions = useCallback((actions?: JarvisAction[]) => {
     if (!actions?.length) return;
@@ -397,6 +408,64 @@ export function JarvisChat({ sessionId, initialPreset, pageContext, onSessionAct
       setIsLoading(false);
     }
   }, [sessionId, applyActions, onSessionActivity, onSessionTitle]);
+
+  const attachToCase = useCallback(async (caseQuery: string, comment: string, uploadFiles: File[]) => {
+    const userMsg: Message = {
+      id: `u-${Date.now()}`,
+      role: "user",
+      content: comment || `Документы в ${caseQuery}: ${uploadFiles.map(f => f.name).join(", ")}`,
+    };
+    setMessages(prev => [...prev, userMsg]);
+    setInput("");
+    setFiles([]);
+    setIsLoading(true);
+    setLoadingHint("Загружаю файлы в дело…");
+
+    try {
+      const form = new FormData();
+      form.append("sessionId", sessionId);
+      form.append("caseQuery", caseQuery);
+      form.append("comment", comment);
+      for (const f of uploadFiles) form.append("files", f);
+
+      const res = await fetch("/api/ai/jarvis/attach-to-case", { method: "POST", body: form });
+      const data = await res.json() as {
+        reply?: string;
+        error?: string;
+        actions?: JarvisAction[];
+        case?: { code: string };
+      };
+
+      if (data.error) {
+        setMessages(prev => [...prev, {
+          id: `e-${Date.now()}`,
+          role: "assistant",
+          content: data.error ?? "Ошибка загрузки",
+          isError: true,
+        }]);
+        return;
+      }
+
+      applyActions(data.actions);
+      speakJarvis(data.reply ?? "Файлы прикреплены");
+      setMessages(prev => [...prev, {
+        id: `a-${Date.now()}`,
+        role: "assistant",
+        content: data.reply ?? "Документы прикреплены к делу.",
+      }]);
+      onSessionActivity?.();
+    } catch {
+      setMessages(prev => [...prev, {
+        id: `e-${Date.now()}`,
+        role: "assistant",
+        content: "Не удалось прикрепить файлы.",
+        isError: true,
+      }]);
+    } finally {
+      setIsLoading(false);
+      setLoadingHint("Думаю…");
+    }
+  }, [sessionId, applyActions, onSessionActivity]);
 
   const sendMessage = useCallback(async (
     text: string,
@@ -525,9 +594,23 @@ export function JarvisChat({ sessionId, initialPreset, pageContext, onSessionAct
         }]);
         return;
       }
+      const defaultCase = attachCaseQuery || extractCaseHintFromPageContext(pageContext) || undefined;
+      const attachQ = parseAttachToCaseVoice(text, defaultCase);
+      if (attachQ) {
+        setPresetId("attach_documents");
+        setAttachCaseQuery(attachQ);
+        setFiles([]);
+        speakJarvis(`Режим прикрепления к делу ${attachQ}. Выберите файлы и нажмите отправить.`);
+        setMessages(prev => [...prev, {
+          id: `h-${Date.now()}`,
+          role: "assistant",
+          content: `Прикрепление к делу «${attachQ}». Выберите PDF или фото и нажмите отправить.`,
+        }]);
+        return;
+      }
       const merged = inputRef.current.trim() ? `${inputRef.current.trim()} ${text}` : text;
       inputRef.current = merged;
-      if (presetId === "register_case") {
+      if (presetId === "register_case" || presetId === "attach_documents") {
         setInput(merged);
         return;
       }
@@ -545,6 +628,13 @@ export function JarvisChat({ sessionId, initialPreset, pageContext, onSessionAct
     if (presetId === "register_case") {
       if (!files.length) return;
       void ingestCase(input.trim(), files);
+      return;
+    }
+
+    if (presetId === "attach_documents") {
+      const q = attachCaseQuery.trim() || extractCaseHintFromPageContext(pageContext) || "";
+      if (!files.length || !q) return;
+      void attachToCase(q, input.trim(), files);
       return;
     }
 
@@ -583,7 +673,9 @@ export function JarvisChat({ sessionId, initialPreset, pageContext, onSessionAct
 
   const canSubmit = presetId === "register_case"
     ? files.length > 0 && !isLoading
-    : (input.trim() || PRESET_FAST_COMMAND[presetId] || preset.starterPrompt) && !isLoading;
+    : presetId === "attach_documents"
+      ? files.length > 0 && (attachCaseQuery.trim() || extractCaseHintFromPageContext(pageContext)) && !isLoading
+      : (input.trim() || PRESET_FAST_COMMAND[presetId] || preset.starterPrompt) && !isLoading;
 
   if (loadingHistory) {
     return (
@@ -735,6 +827,19 @@ export function JarvisChat({ sessionId, initialPreset, pageContext, onSessionAct
             </div>
           )}
 
+          {presetId === "attach_documents" && (
+            <div className="mb-2 flex items-center gap-2">
+              <label className="text-[11px] text-zinc-500 shrink-0">Дело:</label>
+              <input
+                type="text"
+                value={attachCaseQuery}
+                onChange={e => setAttachCaseQuery(e.target.value)}
+                placeholder="LC-2026-001 или фамилия клиента"
+                className="flex-1 rounded-lg border border-zinc-200 bg-white px-2.5 py-1.5 text-xs dark:border-zinc-700 dark:bg-zinc-900"
+              />
+            </div>
+          )}
+
           {preset.fileHint && (
             <p className="mb-2 text-[11px] text-zinc-400">{preset.fileHint}</p>
           )}
@@ -785,8 +890,10 @@ export function JarvisChat({ sessionId, initialPreset, pageContext, onSessionAct
           </div>
           <p className="mt-2 text-center text-[11px] text-zinc-400">
             {presetId === "register_case"
-              ? "Выберите действие «Зарегистрировать дело», прикрепите файлы и отправьте"
-              : "Enter — отправить · Микрофон — говорите до стопа, текст уйдёт сам · «Разрешаю» — голосом или кнопкой"}
+              ? "Прикрепите материалы и отправьте — создам новое дело"
+              : presetId === "attach_documents"
+                ? "Укажите дело, прикрепите файлы и отправьте"
+                : "Enter — отправить · Микрофон — говорите до стопа · «Разрешаю» — голосом или кнопкой"}
           </p>
         </div>
       </div>

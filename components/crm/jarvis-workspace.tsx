@@ -22,6 +22,7 @@ function readHistoryOpen(): boolean {
 export function JarvisWorkspace() {
   const searchParams = useSearchParams();
   const initialPreset = (searchParams.get("preset") as JarvisPresetId | null) ?? undefined;
+  const initialCaseQuery = searchParams.get("case") ?? undefined;
   const [navOpen, setNavOpen] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(true);
   const [sessionId, setSessionId] = useState<string | null>(null);
@@ -151,6 +152,7 @@ export function JarvisWorkspace() {
           key={sessionId}
           sessionId={sessionId}
           initialPreset={initialPreset}
+          initialCaseQuery={initialCaseQuery}
           onSessionActivity={() => void refreshSessions()}
           onSessionTitle={(title) => handleSessionRenamed(sessionId, title)}
         />

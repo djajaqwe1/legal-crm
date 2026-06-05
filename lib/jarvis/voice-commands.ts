@@ -106,11 +106,72 @@ function matchSearchAdilet(text: string): VoiceCommand | null {
   return null;
 }
 
+/** «просрочки» / «что просрочено» */
+function matchOverdueAlert(text: string): VoiceCommand | null {
+  if (/^просроч|что\s+просроч|горящ|опоздав|дедлайн\s+истёк/i.test(text.trim())) {
+    return {
+      toolName: "overdue_alert",
+      args: { limit: 10 },
+      confirmReply: "",
+      instant: true,
+    };
+  }
+  return null;
+}
+
+/** Простое дело без intake (без претензии/иска) */
+function matchSimpleCreateCase(text: string): VoiceCommand | null {
+  if (/претенз|иск|ходатай|нужн.*(претенз|иск|документ)|через\s+\d+\s+(недел|дн)/i.test(text)) {
+    return null;
+  }
+  const m = text.match(/(?:создай|зарегистрируй)\s+дело\s+для\s+(.+?)\s*[—:-]\s*(.+)/i);
+  if (!m) return null;
+  const clientName = m[1].trim();
+  const title = m[2].trim().replace(/\.$/, "");
+  if (title.length < 3) return null;
+  return {
+    toolName: "create_case",
+    args: { clientName, title },
+    confirmReply: `Создам дело «${title}» для «${clientName}» с типовым чеклистом. Разрешаете?`,
+  };
+}
+
+/** «измени описание дела иванова на …» */
+function matchUpdateDescription(text: string, opts?: VoiceMatchOptions): VoiceCommand | null {
+  const m = text.match(
+    /(?:измени|обнови|запиши|добавь)\s+описани(?:е|я)\s+(?:дела\s+)?(.+?)\s+(?:на|:)\s+(.+)/i,
+  );
+  if (!m) return null;
+  const caseQuery = m[1].trim() || opts?.defaultCaseQuery;
+  if (!caseQuery) return null;
+  const value = m[2].trim().replace(/\.$/, "");
+  return {
+    toolName: "update_case",
+    args: { caseQuery, field: "description", value },
+    confirmReply: `Обновлю описание дела «${caseQuery}». Разрешаете?`,
+  };
+}
+
 /** Подсказка UI — переключить режим загрузки (обрабатывается в клиенте) */
 export function matchRegisterCaseVoice(text: string): boolean {
   return /зарегистрируй\s+дело\s+(?:из|по)\s+(?:файл|документ|материал)|импорт\s+дел|загрузи\s+материалы|зарегистрируй\s+по\s+документам/i.test(
     text.trim(),
   );
+}
+
+/** Режим прикрепления файлов к существующему делу */
+export function parseAttachToCaseVoice(text: string, defaultCaseQuery?: string): string | null {
+  const m = text.match(
+    /(?:прикрепи|загрузи|добавь)\s+(?:файл|документ|материал)[ыа]?\s+(?:в\s+)?(?:дело\s+)?(.+)/i,
+  );
+  if (m) return m[1].trim().replace(/\.$/, "");
+  if (
+    defaultCaseQuery &&
+    /^(?:прикрепи|загрузи|добавь)\s+(?:файл|документ|материал)/i.test(text.trim())
+  ) {
+    return defaultCaseQuery;
+  }
+  return null;
 }
 
 /** «найди клиента петров» */
@@ -355,13 +416,16 @@ export function matchVoiceCommand(text: string, options?: VoiceMatchOptions): Vo
 
   return (
     matchMorningBrief(raw) ??
+    matchOverdueAlert(raw) ??
     matchSearchAdilet(raw) ??
     matchOpenCase(raw) ??
     matchCaseBrief(raw, options) ??
+    matchSimpleCreateCase(raw) ??
     matchFindClient(raw) ??
     matchListCaseTasks(raw, options) ??
     matchUpdateDeadline(raw, options) ??
     matchUpdateStatus(raw, options) ??
+    matchUpdateDescription(raw, options) ??
     matchCompleteTask(raw, options) ??
     matchAddTask(raw, options) ??
     matchGenerateForCase(raw, options) ??
@@ -376,10 +440,9 @@ export function matchVoiceCommand(text: string, options?: VoiceMatchOptions): Vo
 export const VOICE_COMMAND_EXAMPLES = [
   "Новое дело для Иванова — спор с УК, через 2 недели претензия",
   "Мой рабочий день",
-  "Что по делу Иванова",
+  "Что просрочено",
+  "Прикрепи документы в дело Иванова",
+  "Создай дело для Петрова — консультация по договору",
   "Добавь задачу позвонить клиенту",
   "Сгенерируй претензию",
-  "Создай клиента Петров, телефон +77001234567",
-  "Отметь задачу подготовить претензию выполненной",
-  "Перенеси дедлайн через 2 недели",
 ];

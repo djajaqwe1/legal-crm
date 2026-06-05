@@ -127,6 +127,28 @@ async function main() {
   const adiletData = await adiletRes.json();
   ok("Jarvis voice adilet", adiletRes.ok && adiletData.toolUsed === "search_adilet", adiletData.toolUsed ?? "?");
 
+  const overdueRes = await fetch(`${BASE}/api/ai/jarvis`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Cookie: cookieHeader() },
+    body: JSON.stringify({ messages: [{ role: "user", content: "что просрочено" }] }),
+  });
+  const overdueData = await overdueRes.json();
+  ok("Jarvis overdue voice", overdueRes.ok && overdueData.toolUsed === "get_overdue_cases", overdueData.toolUsed ?? "?");
+
+  const simpleCaseRes = await fetch(`${BASE}/api/ai/jarvis`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Cookie: cookieHeader() },
+    body: JSON.stringify({
+      messages: [{ role: "user", content: "создай дело для Тестов Голос — консультация по аренде" }],
+    }),
+  });
+  const simpleCaseData = await simpleCaseRes.json();
+  ok(
+    "Jarvis simple create case",
+    simpleCaseRes.ok && simpleCaseData.needsConfirmation && simpleCaseData.pendingAction?.toolName === "create_case",
+    simpleCaseData.pendingAction?.toolName ?? "?",
+  );
+
   const failed = tests.filter((t) => !t.pass);
   console.log(`\n${tests.length - failed.length}/${tests.length} passed`);
   if (failed.length) {
