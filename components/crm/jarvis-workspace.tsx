@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { Menu, PanelRightClose, PanelRightOpen, Plus, Sparkles } from "lucide-react";
 import Link from "next/link";
 import { CrmSidebar } from "@/components/crm/sidebar";
@@ -8,6 +9,7 @@ import { JarvisChat } from "@/components/crm/jarvis-chat";
 import { JarvisSessionSidebar } from "@/components/crm/jarvis-session-sidebar";
 import { ThemeToggle } from "@/components/crm/theme-toggle";
 import type { JarvisSessionListItem } from "@/lib/jarvis/sessions";
+import type { JarvisPresetId } from "@/lib/jarvis/presets";
 
 const HISTORY_KEY = "jarvis-history-open";
 
@@ -18,6 +20,8 @@ function readHistoryOpen(): boolean {
 }
 
 export function JarvisWorkspace() {
+  const searchParams = useSearchParams();
+  const initialPreset = (searchParams.get("preset") as JarvisPresetId | null) ?? undefined;
   const [navOpen, setNavOpen] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(true);
   const [sessionId, setSessionId] = useState<string | null>(null);
@@ -146,6 +150,7 @@ export function JarvisWorkspace() {
         <JarvisChat
           key={sessionId}
           sessionId={sessionId}
+          initialPreset={initialPreset}
           onSessionActivity={() => void refreshSessions()}
           onSessionTitle={(title) => handleSessionRenamed(sessionId, title)}
         />

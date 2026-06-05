@@ -139,16 +139,27 @@ export async function searchAdilet(query: string): Promise<AdiletDocument[]> {
     .filter(x => x.score > 0)
     .sort((a, b) => b.score - a.score);
 
-  if (scored.length) {
-    return scored.map(x => x.doc);
+  let local = scored.map(x => x.doc);
+
+  if (!local.length && /закон|стать|кодекс|норм|прав|суд|иск|договор|претенз/.test(q)) {
+    local = ADILET_KNOWLEDGE_BASE.slice(0, 3);
   }
 
-  // Широкий fallback — топ-3 базовых кодекса для юридических запросов
-  if (/закон|стать|кодекс|норм|прав|суд|иск|договор|претенз/.test(q)) {
-    return ADILET_KNOWLEDGE_BASE.slice(0, 3);
+  const topScore = scored[0]?.score ?? 0;
+  if (local.length >= 3 && topScore >= 4) {
+    return local;
   }
 
-  return [];
+  const { searchAdiletLive } = await import("./adilet-live");
+  const live = await searchAdiletLive(query, 5);
+  if (!live.length) return local;
+
+  const localUrls = new Set(local.map(d => d.url));
+  const merged = [...local];
+  for (const doc of live) {
+    if (!localUrls.has(doc.url)) merged.push(doc);
+  }
+  return merged.slice(0, 8);
 }
 
 export async function fetchAdiletDocumentText(url: string): Promise<string | null> {

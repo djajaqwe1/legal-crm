@@ -131,12 +131,12 @@ export function formatToolReply(
   }
 
   if (toolName === "search_adilet" && data && typeof data === "object" && "documents" in data) {
-    const d = data as { documents: Array<{ title: string; articleRef?: string }> };
+    const d = data as { documents: Array<{ title: string; articleRef?: string; url?: string; type?: string }> };
     if (!d.documents?.length) return "По запросу в базе Әділет ничего не найдено.";
     const list = d.documents
-      .map(doc => `• ${doc.title}${doc.articleRef ? ` (${doc.articleRef})` : ""}`)
+      .map(doc => `• ${doc.title}${doc.type ? ` (${doc.type})` : ""}${doc.articleRef ? ` — ${doc.articleRef}` : ""}`)
       .join("\n");
-    return `Найдено в Әділет:\n${list}`;
+    return `Найдено в Әділет (${d.documents.length}):\n${list}`;
   }
 
   return message || "Готово.";

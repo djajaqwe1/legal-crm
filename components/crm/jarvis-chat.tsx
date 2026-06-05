@@ -7,9 +7,10 @@ import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { DownloadPdfButton } from "@/components/crm/download-pdf-button";
 import { DownloadDocxButton } from "@/components/crm/download-docx-button";
-import { useJarvisVoice, isVoiceConfirm } from "@/components/crm/use-jarvis-voice";
-import { JARVIS_PRESETS, getPreset, type JarvisPresetId } from "@/lib/jarvis/presets";
-import { VOICE_COMMAND_EXAMPLES } from "@/lib/jarvis/voice-commands";
+import { useJarvisVoice, isVoiceConfirm, speakJarvis } from "@/components/crm/use-jarvis-voice";
+import { isVoiceDeny } from "@/lib/jarvis/types";
+import { JARVIS_PRESETS, getPreset, PRESET_FAST_COMMAND, type JarvisPresetId } from "@/lib/jarvis/presets";
+import { VOICE_COMMAND_EXAMPLES, matchRegisterCaseVoice } from "@/lib/jarvis/voice-commands";
 import type { JarvisAction, JarvisStep } from "@/lib/jarvis/types";
 import { TOOL_LABELS } from "@/lib/jarvis/types";
 
@@ -31,6 +32,8 @@ type Message = {
 
 type Props = {
   sessionId: string;
+  initialPreset?: JarvisPresetId;
+  pageContext?: string;
   onSessionActivity?: () => void;
   onSessionTitle?: (title: string) => void;
 };
@@ -269,11 +272,11 @@ function ConfirmActionCard({
   );
 }
 
-export function JarvisChat({ sessionId, onSessionActivity, onSessionTitle }: Props) {
+export function JarvisChat({ sessionId, initialPreset, pageContext, onSessionActivity, onSessionTitle }: Props) {
   const router = useRouter();
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
-  const [presetId, setPresetId] = useState<JarvisPresetId>("chat");
+  const [presetId, setPresetId] = useState<JarvisPresetId>(initialPreset ?? "chat");
   const [files, setFiles] = useState<File[]>([]);
   const [presetOpen, setPresetOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -301,7 +304,7 @@ export function JarvisChat({ sessionId, onSessionActivity, onSessionTitle }: Pro
       setMessages([]);
       setPendingAction(undefined);
       setFiles([]);
-      setPresetId("chat");
+      setPresetId(initialPreset ?? "chat");
       try {
         const res = await fetch(`/api/ai/jarvis/sessions/${sessionId}`);
         if (!res.ok) throw new Error("load failed");
@@ -329,7 +332,7 @@ export function JarvisChat({ sessionId, onSessionActivity, onSessionTitle }: Pro
         setLoadingHistory(false);
       }
     })();
-  }, [sessionId]);
+  }, [sessionId, initialPreset]);
 
   const applyActions = useCallback((actions?: JarvisAction[]) => {
     if (!actions?.length) return;
@@ -434,6 +437,7 @@ export function JarvisChat({ sessionId, onSessionActivity, onSessionTitle }: Pro
           messages: history.map(m => ({ role: m.role, content: m.content })),
           confirmed: isConfirm,
           pendingAction: isConfirm ? effective ?? undefined : undefined,
+          pageContext,
         }),
       });
 
@@ -457,6 +461,11 @@ export function JarvisChat({ sessionId, onSessionActivity, onSessionTitle }: Pro
           isError: true,
         }]);
         return;
+      }
+
+      if (data.reply && !data.needsConfirmation) speakJarvis(data.reply);
+      if (data.needsConfirmation && data.reply) {
+        speakJarvis(`${data.reply} Скажите разрешаю или отмена.`);
       }
 
       applyActions(data.actions);
@@ -491,7 +500,7 @@ export function JarvisChat({ sessionId, onSessionActivity, onSessionTitle }: Pro
       setIsLoading(false);
       setLoadingHint("Думаю…");
     }
-  }, [messages, isLoading, sessionId, applyActions, onSessionActivity, onSessionTitle]);
+  }, [messages, isLoading, sessionId, pageContext, applyActions, onSessionActivity, onSessionTitle]);
 
   sendRef.current = sendMessage;
 
@@ -501,10 +510,28 @@ export function JarvisChat({ sessionId, onSessionActivity, onSessionTitle }: Pro
         void sendRef.current(text, true, pendingRef.current);
         return;
       }
+      if (pendingRef.current && isVoiceDeny(text)) {
+        handleDeny();
+        return;
+      }
+      if (matchRegisterCaseVoice(text)) {
+        setPresetId("register_case");
+        setFiles([]);
+        speakJarvis("Режим регистрации дела. Прикрепите PDF или текстовые файлы и нажмите отправить.");
+        setMessages(prev => [...prev, {
+          id: `h-${Date.now()}`,
+          role: "assistant",
+          content: "Режим «Зарегистрировать дело». Прикрепите материалы (.pdf, .txt) и нажмите отправить — создам карточку автоматически.",
+        }]);
+        return;
+      }
       const merged = inputRef.current.trim() ? `${inputRef.current.trim()} ${text}` : text;
       inputRef.current = merged;
-      // Голосовой оператор: после записи — сразу в работу (кроме загрузки файлов)
-      if (presetId !== "register_case" && merged.trim().length >= 12) {
+      if (presetId === "register_case") {
+        setInput(merged);
+        return;
+      }
+      if (merged.trim().length >= 8) {
         setInput("");
         inputRef.current = "";
         void sendRef.current(merged.trim());
@@ -521,8 +548,14 @@ export function JarvisChat({ sessionId, onSessionActivity, onSessionTitle }: Pro
       return;
     }
 
-    const text = input.trim() || preset.starterPrompt || "";
+    const quick = PRESET_FAST_COMMAND[presetId];
+    const text = input.trim() || quick || preset.starterPrompt || "";
     if (!text) return;
+
+    if (quick && !input.trim()) {
+      void sendMessage(quick);
+      return;
+    }
 
     if (preset.starterPrompt && !input.trim()) {
       void sendMessage(preset.starterPrompt);
@@ -550,7 +583,7 @@ export function JarvisChat({ sessionId, onSessionActivity, onSessionTitle }: Pro
 
   const canSubmit = presetId === "register_case"
     ? files.length > 0 && !isLoading
-    : (input.trim() || preset.starterPrompt) && !isLoading;
+    : (input.trim() || PRESET_FAST_COMMAND[presetId] || preset.starterPrompt) && !isLoading;
 
   if (loadingHistory) {
     return (

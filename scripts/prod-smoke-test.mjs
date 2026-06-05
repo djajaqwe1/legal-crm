@@ -119,6 +119,14 @@ async function main() {
   const clientData = await clientRes.json();
   ok("Jarvis create client confirm", clientRes.ok && clientData.needsConfirmation === true && clientData.pendingAction?.toolName === "create_client", clientData.pendingAction?.toolName ?? "?");
 
+  const adiletRes = await fetch(`${BASE}/api/ai/jarvis`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Cookie: cookieHeader() },
+    body: JSON.stringify({ messages: [{ role: "user", content: "найди в адилет жилищные отношения" }] }),
+  });
+  const adiletData = await adiletRes.json();
+  ok("Jarvis voice adilet", adiletRes.ok && adiletData.toolUsed === "search_adilet", adiletData.toolUsed ?? "?");
+
   const failed = tests.filter((t) => !t.pass);
   console.log(`\n${tests.length - failed.length}/${tests.length} passed`);
   if (failed.length) {

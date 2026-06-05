@@ -114,7 +114,7 @@ async function runInstantVoiceTool(
     };
   }
 
-  if (toolName === "list_case_tasks" || toolName === "get_clients") {
+  if (toolName === "list_case_tasks" || toolName === "get_clients" || toolName === "search_adilet") {
     const prep = toolName === "list_case_tasks" ? await resolveVoiceCaseArgs(workspaceId, args) : { args };
     if ("error" in prep) {
       return { reply: prep.error, toolUsed: toolName, toolResult: null, actions: [] };

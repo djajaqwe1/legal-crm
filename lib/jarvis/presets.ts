@@ -75,3 +75,10 @@ export const JARVIS_PRESETS: JarvisPreset[] = [
 export function getPreset(id: JarvisPresetId): JarvisPreset {
   return JARVIS_PRESETS.find(p => p.id === id) ?? JARVIS_PRESETS[0];
 }
+
+/** Мгновенная команда без Gemini при отправке пресета без текста */
+export const PRESET_FAST_COMMAND: Partial<Record<JarvisPresetId, string>> = {
+  daily_routine: "мой рабочий день",
+  analytics: "покажи расширенную аналитику дел",
+  report_employee: "отчёт эффективности юриста",
+};

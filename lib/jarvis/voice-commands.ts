@@ -79,6 +79,40 @@ function matchCaseBrief(text: string, opts?: VoiceMatchOptions): VoiceCommand | 
   };
 }
 
+/** «найди в адилет жилищный кодекс» */
+function matchSearchAdilet(text: string): VoiceCommand | null {
+  const m = text.match(
+    /(?:найди|поиск|что\s+говорит)\s+(?:в\s+)?(?:адилет|әділет|базе\s+закон)[а]?\s+(?:по\s+)?(.+)/i,
+  );
+  if (m) {
+    return {
+      toolName: "search_adilet",
+      args: { query: m[1].trim(), limit: 6 },
+      confirmReply: "",
+      instant: true,
+    };
+  }
+  if (/^(?:адилет|әділет)\s+(.+)/i.test(text)) {
+    const q = text.replace(/^(?:адилет|әділет)\s+/i, "").trim();
+    if (q.length >= 4) {
+      return {
+        toolName: "search_adilet",
+        args: { query: q, limit: 6 },
+        confirmReply: "",
+        instant: true,
+      };
+    }
+  }
+  return null;
+}
+
+/** Подсказка UI — переключить режим загрузки (обрабатывается в клиенте) */
+export function matchRegisterCaseVoice(text: string): boolean {
+  return /зарегистрируй\s+дело\s+(?:из|по)\s+(?:файл|документ|материал)|импорт\s+дел|загрузи\s+материалы|зарегистрируй\s+по\s+документам/i.test(
+    text.trim(),
+  );
+}
+
 /** «найди клиента петров» */
 function matchFindClient(text: string): VoiceCommand | null {
   const m = text.match(/(?:найди|покажи|ищи)\s+клиент[а]?\s+(.+)/i);
@@ -321,6 +355,7 @@ export function matchVoiceCommand(text: string, options?: VoiceMatchOptions): Vo
 
   return (
     matchMorningBrief(raw) ??
+    matchSearchAdilet(raw) ??
     matchOpenCase(raw) ??
     matchCaseBrief(raw, options) ??
     matchFindClient(raw) ??

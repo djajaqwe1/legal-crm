@@ -11,6 +11,7 @@ import {
   speakJarvis,
 } from "@/components/crm/use-jarvis-voice";
 import { isVoiceDeny } from "@/lib/jarvis/types";
+import { matchRegisterCaseVoice } from "@/lib/jarvis/voice-commands";
 
 type PendingAction = { toolName: string; args: Record<string, unknown> };
 
@@ -182,6 +183,13 @@ export function PageAssistantPanel({ pageContext }: Props) {
         handleDeny();
         return;
       }
+    }
+
+    if (matchRegisterCaseVoice(t)) {
+      speakJarvis("Открываю режим регистрации дела. Прикрепите PDF файлы.");
+      router.push("/admin?preset=register_case");
+      setOpen(false);
+      return;
     }
 
     void sendMessage(t);
