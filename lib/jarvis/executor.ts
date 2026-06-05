@@ -9,6 +9,7 @@ import { applyCaseWorkflow, autoApplyCaseWorkflow, type CaseWorkflowId } from "@
 import { getLawyerDailyBrief, getOpenTasksForWorkspace } from "@/lib/lawyer-daily";
 import { searchLegalGrounding } from "@/lib/legal-grounding/adilet-search";
 import { generateTextFallback } from "@/lib/llm/router";
+import { addDocument } from "@/lib/crm-repository";
 import { FORBIDDEN_TOOLS, TOOL_LABELS } from "./types";
 import type { JarvisAction, JarvisToolResult } from "./types";
 
@@ -504,7 +505,23 @@ export async function executeJarvisTool(
       });
       if (docResult.success) {
         documentData = docResult.data;
-        documentMsg = ` Черновик «${documentType}» готов.`;
+        const docText = (docResult.data as { text?: string })?.text;
+        if (docText && caseId) {
+          try {
+            await addDocument(caseId, `${documentType}-${caseCode ?? caseId}.txt`, "#jarvis-generated", {
+              category: "correspondence",
+              storageProvider: "crm",
+              mimeType: "text/plain",
+              sizeBytes: Buffer.byteLength(docText, "utf8"),
+              extractedText: docText,
+            });
+            documentMsg = ` Черновик «${documentType}» готов и сохранён в дело.`;
+          } catch {
+            documentMsg = ` Черновик «${documentType}» готов (сохранение в дело не удалось).`;
+          }
+        } else {
+          documentMsg = ` Черновик «${documentType}» готов.`;
+        }
       } else {
         documentMsg = ` Не удалось сгенерировать документ: ${docResult.message}`;
       }
@@ -543,7 +560,11 @@ export async function executeJarvisTool(
 ${grounding.contextBlock || "Предупреждение: нормы из Әділет не найдены — используй только общую структуру без вымышленных статей."}
 
 Ситуация: ${description}
-${clientName ? `Клиент: ${clientName}` : ""}
+
+Клиент (истец / отправитель документа): ${clientName ?? "[указать]"}
+Документ готовит юрист ТОО «Конгломерат Алтай» от имени клиента.
+НЕ называй клиента «ТОО», если это не указано явно в ситуации.
+Поля без данных помечай [ЗАПОЛНИТЬ …].
 
 Выведи только текст документа. Цитируй закон только если он указан в блоке Әділет выше.`;
 

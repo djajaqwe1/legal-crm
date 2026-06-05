@@ -213,7 +213,7 @@ function ConfirmActionCard({
 }) {
   const label = TOOL_LABELS[action.toolName] ?? action.toolName;
   const preview = Object.entries(action.args)
-    .filter(([, v]) => v != null && String(v).trim())
+    .filter(([k, v]) => v != null && String(v).trim() && !["adiletQuery", "description"].includes(k))
     .map(([k, v]) => `${k}: ${String(v).slice(0, 80)}`)
     .join(" · ");
 
@@ -246,9 +246,11 @@ export function JarvisChat({ sessionId, onSessionActivity, onSessionTitle }: Pro
   const [files, setFiles] = useState<File[]>([]);
   const [presetOpen, setPresetOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [loadingHint, setLoadingHint] = useState("Думаю…");
   const [loadingHistory, setLoadingHistory] = useState(true);
   const [pendingAction, setPendingAction] = useState<Message["pendingAction"]>(undefined);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const inputRef = useRef("");
   const endRef = useRef<HTMLDivElement>(null);
   const pendingRef = useRef(pendingAction);
   pendingRef.current = pendingAction;
@@ -282,8 +284,14 @@ export function JarvisChat({ sessionId, onSessionActivity, onSessionTitle }: Pro
           toolUsed: m.metadata?.toolUsed as string | undefined,
           toolResult: m.metadata?.toolResult as ToolResult,
           steps: m.metadata?.steps as JarvisStep[] | undefined,
+          needsConfirmation: Boolean(m.metadata?.needsConfirmation),
+          pendingAction: m.metadata?.pendingAction as Message["pendingAction"],
         }));
         setMessages(loaded);
+        const lastOpen = [...loaded]
+          .reverse()
+          .find(m => m.needsConfirmation && m.pendingAction && !m.confirmed && !m.denied);
+        if (lastOpen?.pendingAction) setPendingAction(lastOpen.pendingAction);
       } catch {
         setMessages([]);
       } finally {
@@ -376,7 +384,15 @@ export function JarvisChat({ sessionId, onSessionActivity, onSessionTitle }: Pro
     const history = [...messages, userMsg];
     setMessages(history);
     setInput("");
+    inputRef.current = "";
     setIsLoading(true);
+    if (isConfirm && effective?.toolName === "intake_new_case") {
+      setLoadingHint("Создаю дело, задачи и документ… до 1 минуты");
+    } else if (isConfirm) {
+      setLoadingHint("Выполняю…");
+    } else {
+      setLoadingHint("Думаю…");
+    }
 
     try {
       const res = await fetch("/api/ai/jarvis", {
@@ -442,6 +458,7 @@ export function JarvisChat({ sessionId, onSessionActivity, onSessionTitle }: Pro
       }]);
     } finally {
       setIsLoading(false);
+      setLoadingHint("Думаю…");
     }
   }, [messages, isLoading, sessionId, applyActions, onSessionActivity, onSessionTitle]);
 
@@ -453,7 +470,16 @@ export function JarvisChat({ sessionId, onSessionActivity, onSessionTitle }: Pro
         void sendRef.current(text, true, pendingRef.current);
         return;
       }
-      setInput(prev => (prev.trim() ? `${prev.trim()} ${text}` : text));
+      const merged = inputRef.current.trim() ? `${inputRef.current.trim()} ${text}` : text;
+      inputRef.current = merged;
+      // Голосовой оператор: длинная речь → сразу в работу без Enter
+      if (presetId === "chat" && merged.trim().length >= 12) {
+        setInput("");
+        inputRef.current = "";
+        void sendRef.current(merged.trim());
+        return;
+      }
+      setInput(merged);
     },
   });
 
@@ -552,9 +578,9 @@ export function JarvisChat({ sessionId, onSessionActivity, onSessionTitle }: Pro
                   <ResultCard toolName={msg.toolUsed} data={msg.toolResult} />
                 )}
 
-                {msg.needsConfirmation && !msg.confirmed && !msg.denied && msg.pendingAction && pendingAction && (
+                {msg.needsConfirmation && !msg.confirmed && !msg.denied && (msg.pendingAction ?? pendingAction) && (
                   <ConfirmActionCard
-                    action={msg.pendingAction}
+                    action={(msg.pendingAction ?? pendingAction)!}
                     onConfirm={() => void handleConfirm()}
                     onDeny={handleDeny}
                     disabled={isLoading}
@@ -566,7 +592,7 @@ export function JarvisChat({ sessionId, onSessionActivity, onSessionTitle }: Pro
             {isLoading && (
               <div className="flex items-center gap-2 text-sm text-zinc-400">
                 <Loader2 className="h-4 w-4 animate-spin" />
-                {presetId === "register_case" ? "Анализирую материалы…" : "Думаю…"}
+                {presetId === "register_case" ? "Анализирую материалы…" : loadingHint}
               </div>
             )}
           </div>
@@ -658,7 +684,10 @@ export function JarvisChat({ sessionId, onSessionActivity, onSessionTitle }: Pro
           <div className="flex items-end gap-2 rounded-2xl border border-zinc-200 bg-white p-2 shadow-sm dark:border-zinc-700 dark:bg-zinc-900">
             <textarea
               value={input}
-              onChange={e => setInput(e.target.value)}
+              onChange={e => {
+                setInput(e.target.value);
+                inputRef.current = e.target.value;
+              }}
               onKeyDown={e => {
                 if (e.key === "Enter" && !e.shiftKey) {
                   e.preventDefault();
@@ -693,7 +722,7 @@ export function JarvisChat({ sessionId, onSessionActivity, onSessionTitle }: Pro
           <p className="mt-2 text-center text-[11px] text-zinc-400">
             {presetId === "register_case"
               ? "Выберите действие «Зарегистрировать дело», прикрепите файлы и отправьте"
-              : "Enter — отправить · Микрофон — длинная запись (как в ChatGPT), стоп по кнопке · Изменения в CRM — только с вашего «Разрешаю»"}
+              : "Enter — отправить · Микрофон — говорите до стопа, текст уйдёт сам · «Разрешаю» — голосом или кнопкой"}
           </p>
         </div>
       </div>

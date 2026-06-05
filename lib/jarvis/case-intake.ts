@@ -16,18 +16,31 @@ function addDays(base: Date, days: number): string {
   return d.toISOString().slice(0, 10);
 }
 
+function capitalizeSentence(s: string): string {
+  const t = s.trim();
+  if (!t) return t;
+  return t.charAt(0).toUpperCase() + t.slice(1);
+}
+
+function extractClientName(raw: string): string | null {
+  const m = raw.match(
+    /(?:для|клиент[а]?)\s+([A-Za-zА-Яа-яЁё][A-Za-zА-Яа-яЁё\s\-]*?)(?=\s*[—–-]|\s*,|\s+дедлайн|\s+нужн|\s+создай|\s+спор|\s+иск|$)/i,
+  );
+  return m?.[1]?.trim().replace(/\s+/g, " ") ?? null;
+}
+
 function extractTitle(text: string, clientName: string): string {
+  const escaped = clientName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   const cleaned = text
     .replace(/^(нов(ое|ый)\s+дел[оа]?[:\s—-]*)/i, "")
-    .replace(new RegExp(`(?:для|клиент[а]?)\\s+${clientName}\\s*[—,-]?\\s*`, "i"), "")
+    .replace(new RegExp(`(?:для|клиент[а]?)\\s+${escaped}\\s*[—,-]?\\s*`, "i"), "")
     .replace(/,?\s*дедлайн[^,.]*\.?/i, "")
     .replace(/,?\s*(нужн|состав|подготов)[^.]*\.?/i, "")
     .trim();
 
   const firstSentence = cleaned.split(/[.!?\n]/)[0]?.trim() ?? cleaned;
-  if (firstSentence.length >= 8) return firstSentence.slice(0, 120);
-
-  return cleaned.slice(0, 120) || `Дело — ${clientName}`;
+  const title = firstSentence.length >= 8 ? firstSentence.slice(0, 120) : cleaned.slice(0, 120);
+  return capitalizeSentence(title || `Дело — ${clientName}`);
 }
 
 function buildAdiletQuery(text: string): string {
@@ -61,11 +74,7 @@ export function parseCaseIntakeRequest(text: string): CaseIntakeParsed | null {
 
   if (!isIntake) return null;
 
-  const clientMatch =
-    raw.match(/(?:для|клиент[а]?)\s+([A-Za-zА-Яа-яЁё][A-Za-zА-Яа-яЁё0-9\-]*)/i) ??
-    raw.match(/дело\s+([A-Za-zА-Яа-яЁё][A-Za-zА-Яа-яЁё0-9\-]*)/i);
-
-  const clientName = clientMatch?.[1]?.trim();
+  const clientName = extractClientName(raw) ?? raw.match(/дело\s+([A-Za-zА-Яа-яЁё][^\s,—-]+)/i)?.[1]?.trim();
   if (!clientName) return null;
 
   let deadline: string | undefined;
@@ -98,7 +107,7 @@ export function parseCaseIntakeRequest(text: string): CaseIntakeParsed | null {
 
 export function buildIntakeConfirmReply(
   intake: CaseIntakeParsed,
-  adiletSummary: string,
+  _adiletSummary: string,
   lawsFound: number,
 ): string {
   const deadlineRu = intake.deadline
@@ -108,21 +117,17 @@ export function buildIntakeConfirmReply(
   const steps = [
     `1. Создам дело «${intake.title}» для «${intake.clientName}» (дедлайн: ${deadlineRu})`,
     intake.workflowId ? "2. Применю типовой чеклист задач по делу" : null,
-    intake.documentType ? `3. Подготовлю черновик: ${intake.documentType}` : null,
+    intake.documentType ? `3. Подготовлю черновик «${intake.documentType}» и сохраню в карточку дела` : null,
   ].filter(Boolean);
 
   return [
     lawsFound > 0
-      ? `Проверил базу Әділет — найдено ${lawsFound} релевантных акт(ов).`
+      ? `Проверил базу Әділет — найдено ${lawsFound} релевантных акт(ов) (ссылки ниже).`
       : "В Әділет по теме мало совпадений — документ составлю по вашему описанию.",
     "",
     "План действий:",
     ...steps,
     "",
-    adiletSummary ? `Нормы:\n${adiletSummary.slice(0, 400)}${adiletSummary.length > 400 ? "…" : ""}` : "",
-    "",
-    "Разрешаете выполнить всё это?",
-  ]
-    .filter(Boolean)
-    .join("\n");
+    "Нажмите «Разрешаю» или скажите голосом «разрешаю» — выполню всё автоматически.",
+  ].join("\n");
 }

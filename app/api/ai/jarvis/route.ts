@@ -150,6 +150,7 @@ export async function POST(req: Request) {
             toolUsed: "search_adilet",
             toolResult: grounding,
             needsConfirmation: true,
+            pendingAction,
           },
         },
       ]);
@@ -226,6 +227,7 @@ export async function POST(req: Request) {
           toolResult: result.toolResult,
           steps: result.steps,
           needsConfirmation: result.needsConfirmation,
+          pendingAction: result.pendingAction,
         },
       },
     ]);
