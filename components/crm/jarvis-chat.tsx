@@ -5,8 +5,7 @@ import { useRouter } from "next/navigation";
 import { Send, Mic, MicOff, Loader2, CheckCircle, XCircle, Paperclip, X, ChevronDown } from "lucide-react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
-import { DownloadPdfButton } from "@/components/crm/download-pdf-button";
-import { DownloadDocxButton } from "@/components/crm/download-docx-button";
+import { JarvisIntakeResultCard, JarvisResultCard } from "@/components/crm/jarvis-result-card";
 import { useJarvisVoice, isVoiceConfirm, speakJarvis } from "@/components/crm/use-jarvis-voice";
 import { isVoiceDeny } from "@/lib/jarvis/types";
 import { JARVIS_PRESETS, getPreset, PRESET_FAST_COMMAND, type JarvisPresetId } from "@/lib/jarvis/presets";
@@ -125,87 +124,11 @@ function ResultCard({ toolName, data }: { toolName: string; data: ToolResult }) 
       </div>
     );
   }
-  if (toolName === "intake_new_case" && typeof data === "object" && data && "case" in data) {
-    const d = data as {
-      case: { code?: string; title?: string };
-      document?: { type?: string; text?: string; legalSources?: Array<{ title: string; url: string }> } | null;
-      legalSources?: Array<{ title: string; url: string }>;
-    };
-    return (
-      <div className="mt-3 space-y-2">
-        {d.case.code && (
-          <p className="text-[13px] font-medium text-emerald-800 dark:text-emerald-200">
-            Дело {d.case.code} — {d.case.title}
-          </p>
-        )}
-        {d.document?.text && (
-          <>
-            <p className="text-[11px] uppercase tracking-wide text-zinc-400">Черновик {d.document.type ?? "документа"}</p>
-            <div className="mb-2 flex flex-wrap gap-2">
-              <DownloadPdfButton
-                title={`${d.case.code ?? "document"}-${d.document.type ?? "doc"}`}
-                text={d.document.text}
-              />
-              <DownloadDocxButton
-                title={`${d.case.code ?? "document"}-${d.document.type ?? "doc"}`}
-                text={d.document.text}
-              />
-            </div>
-            <pre className="max-h-64 overflow-y-auto rounded-xl border border-zinc-200/80 bg-zinc-50/50 p-4 text-[13px] leading-relaxed whitespace-pre-wrap dark:border-zinc-800 dark:bg-zinc-900/30">
-              {d.document.text}
-            </pre>
-          </>
-        )}
-      </div>
-    );
+  if (toolName === "intake_new_case") {
+    return <JarvisIntakeResultCard data={data} />;
   }
-  if (toolName === "generate_document" && typeof data === "object" && data && "text" in data) {
-    const d = data as { type: string; text: string; legalSources?: Array<{ title: string; url: string }> };
-    return (
-      <div className="mt-3 space-y-2">
-        {d.legalSources && d.legalSources.length > 0 && (
-          <div className="flex flex-wrap gap-2">
-            {d.legalSources.map(s => (
-              <a
-                key={s.url}
-                href={s.url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="rounded-full bg-emerald-50 px-2.5 py-1 text-[10px] text-emerald-800 hover:underline dark:bg-emerald-900/30 dark:text-emerald-200"
-              >
-                {s.title.slice(0, 40)}…
-              </a>
-            ))}
-          </div>
-        )}
-        <div className="flex flex-wrap gap-2">
-          <DownloadPdfButton title={d.type} text={d.text} />
-          <DownloadDocxButton title={d.type} text={d.text} />
-        </div>
-        <pre className="max-h-64 overflow-y-auto rounded-xl border border-zinc-200/80 bg-zinc-50/50 p-4 text-[13px] leading-relaxed whitespace-pre-wrap dark:border-zinc-800 dark:bg-zinc-900/30">
-          {d.text}
-        </pre>
-      </div>
-    );
-  }
-  if (toolName === "generate_for_case" && typeof data === "object" && data && "document" in data) {
-    const d = data as {
-      caseCode?: string;
-      document?: { type?: string; text?: string } | null;
-    };
-    if (!d.document?.text) return null;
-    const exportTitle = `${d.caseCode ?? "case"}-${d.document.type ?? "doc"}`;
-    return (
-      <div className="mt-3 space-y-2">
-        <div className="flex flex-wrap gap-2">
-          <DownloadPdfButton title={exportTitle} text={d.document.text} />
-          <DownloadDocxButton title={exportTitle} text={d.document.text} />
-        </div>
-        <pre className="max-h-64 overflow-y-auto rounded-xl border border-zinc-200/80 bg-zinc-50/50 p-4 text-[13px] leading-relaxed whitespace-pre-wrap dark:border-zinc-800 dark:bg-zinc-900/30">
-          {d.document.text}
-        </pre>
-      </div>
-    );
+  if (toolName === "generate_document" || toolName === "generate_for_case") {
+    return <JarvisResultCard toolName={toolName} data={data} />;
   }
   if (toolName === "search_adilet" && typeof data === "object" && data && "documents" in data) {
     const d = data as {
@@ -345,10 +268,13 @@ export function JarvisChat({
     })();
   }, [sessionId, initialPreset, initialCaseQuery]);
 
-  const applyActions = useCallback((actions?: JarvisAction[]) => {
+  const applyActions = useCallback((actions?: JarvisAction[], toolUsed?: string) => {
     if (!actions?.length) return;
     for (const a of actions) {
-      if (a.type === "navigate") router.push(a.path);
+      if (a.type === "navigate") {
+        if (toolUsed === "intake_new_case") continue;
+        router.push(a.path);
+      }
       if (a.type === "refresh") router.refresh();
     }
   }, [router]);
@@ -537,7 +463,7 @@ export function JarvisChat({
         speakJarvis(`${data.reply} Скажите разрешаю или отмена.`);
       }
 
-      applyActions(data.actions);
+      applyActions(data.actions, data.toolUsed);
 
       setMessages(prev => [...prev, {
         id: `a-${Date.now()}`,

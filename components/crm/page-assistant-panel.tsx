@@ -13,6 +13,9 @@ import {
 import { isVoiceDeny } from "@/lib/jarvis/types";
 import { matchRegisterCaseVoice, parseAttachToCaseVoice } from "@/lib/jarvis/voice-commands";
 import { extractCaseHintFromPageContext } from "@/lib/jarvis/case-resolve";
+import { JarvisResultCard } from "@/components/crm/jarvis-result-card";
+
+type ToolResult = Record<string, unknown> | unknown[] | null;
 
 type PendingAction = { toolName: string; args: Record<string, unknown> };
 
@@ -25,6 +28,8 @@ type Message = {
   pendingAction?: PendingAction;
   confirmed?: boolean;
   denied?: boolean;
+  toolUsed?: string;
+  toolResult?: ToolResult;
 };
 
 type Props = {
@@ -93,6 +98,7 @@ export function PageAssistantPanel({ pageContext }: Props) {
         reply?: string;
         error?: string;
         toolUsed?: string;
+        toolResult?: ToolResult;
         actions?: JarvisAction[];
         needsConfirmation?: boolean;
         pendingAction?: PendingAction;
@@ -114,6 +120,8 @@ export function PageAssistantPanel({ pageContext }: Props) {
         content: data.reply ?? "",
         needsConfirmation: data.needsConfirmation,
         pendingAction: data.pendingAction,
+        toolUsed: data.toolUsed,
+        toolResult: data.toolResult,
       };
 
       setMessages(prev => [...prev, assistantMsg]);
@@ -127,7 +135,10 @@ export function PageAssistantPanel({ pageContext }: Props) {
 
       if (data.actions?.length) {
         for (const a of data.actions) {
-          if (a.type === "navigate") router.push(a.path);
+          if (a.type === "navigate") {
+            if (data.toolUsed === "intake_new_case") continue;
+            router.push(a.path);
+          }
           if (a.type === "refresh") router.refresh();
         }
       }
@@ -289,6 +300,9 @@ export function PageAssistantPanel({ pageContext }: Props) {
                   )}
                   {msg.denied && (
                     <span className="text-[10px] text-red-500 font-bold">✗ Отменено</span>
+                  )}
+                  {msg.toolResult && msg.toolUsed && (
+                    <JarvisResultCard toolName={msg.toolUsed} data={msg.toolResult} compact />
                   )}
                 </div>
               </div>
