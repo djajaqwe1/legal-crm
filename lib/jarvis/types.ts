@@ -31,6 +31,7 @@ export const READ_ONLY_TOOLS = new Set([
   "get_lawyer_daily",
   "get_open_tasks",
   "get_case_context",
+  "list_case_tasks",
   "search_adilet",
   "navigate_to",
 ]);
@@ -56,6 +57,7 @@ export const MUTATING_TOOLS = new Set([
   "generate_document",
   "intake_new_case",
   "generate_for_case",
+  "complete_task",
 ]);
 
 export const TOOL_LABELS: Record<string, string> = {
@@ -68,6 +70,7 @@ export const TOOL_LABELS: Record<string, string> = {
   generate_document: "Сгенерировать документ",
   intake_new_case: "Полный intake: дело + чеклист + документ",
   generate_for_case: "Документ по существующему делу",
+  complete_task: "Отметить задачу выполненной",
 };
 
 export const VOICE_CONFIRM_RE =

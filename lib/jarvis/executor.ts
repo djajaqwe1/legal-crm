@@ -159,6 +159,69 @@ export async function executeJarvisTool(
     };
   }
 
+  if (toolName === "list_case_tasks") {
+    const resolved = await resolveCaseId(workspaceId, args);
+    if ("error" in resolved) return { success: false, message: resolved.error };
+    const { caseId, caseCode } = resolved;
+    const tasks = await prisma.task.findMany({
+      where: { legalCaseId: caseId },
+      orderBy: [{ completed: "asc" }, { dueDate: "asc" }],
+    });
+    const data = tasks.map(t => ({
+      id: t.id,
+      title: t.title,
+      completed: t.completed,
+      dueDate: t.dueDate ? new Date(t.dueDate).toLocaleDateString("ru-RU") : null,
+    }));
+    const open = data.filter(t => !t.completed);
+    const list = open.length
+      ? open.map(t => `• ${t.title}${t.dueDate ? ` (${t.dueDate})` : ""}`).join("\n")
+      : "Все задачи выполнены.";
+    return {
+      success: true,
+      data: { caseCode, tasks: data },
+      message: `Задачи ${caseCode} (${open.length} открытых):\n${list}`,
+      actions: [{ type: "navigate", path: `/admin/cases/${caseId}`, label: caseCode }],
+    };
+  }
+
+  if (toolName === "complete_task") {
+    const { taskQuery, taskId } = args as { taskQuery?: string; taskId?: string };
+    const resolved = await resolveCaseId(workspaceId, args);
+    if ("error" in resolved) return { success: false, message: resolved.error };
+    const { caseId, caseCode } = resolved;
+
+    let task = taskId
+      ? await prisma.task.findFirst({ where: { id: taskId, legalCaseId: caseId } })
+      : null;
+
+    if (!task && taskQuery) {
+      const q = taskQuery.toLowerCase();
+      const candidates = await prisma.task.findMany({
+        where: { legalCaseId: caseId, completed: false },
+      });
+      task =
+        candidates.find(t => t.title.toLowerCase() === q) ??
+        candidates.find(t => t.title.toLowerCase().includes(q)) ??
+        candidates.find(t => q.includes(t.title.toLowerCase().slice(0, 12))) ??
+        null;
+    }
+
+    if (!task) {
+      return { success: false, message: `Задача «${taskQuery ?? taskId}» не найдена в ${caseCode}` };
+    }
+
+    await prisma.task.update({ where: { id: task.id }, data: { completed: true } });
+    actions.push({ type: "navigate", path: `/admin/cases/${caseId}` });
+    actions.push({ type: "refresh" });
+    return {
+      success: true,
+      data: { id: task.id, title: task.title, caseCode },
+      message: `Задача «${task.title}» отмечена выполненной (${caseCode})`,
+      actions,
+    };
+  }
+
   if (toolName === "apply_case_checklist") {
     const { workflowId } = args as { caseId?: string; caseQuery?: string; workflowId: CaseWorkflowId };
     const resolved = await resolveCaseId(workspaceId, args);
@@ -726,6 +789,9 @@ export function buildConfirmText(toolName: string, args: Record<string, unknown>
   }
   if (toolName === "generate_for_case") {
     return `🔒 ${label}\n\nПодготовлю «${args.documentType}» и сохраню в дело (id: ${args.caseId ?? args.caseQuery}).\n\nРазрешаете?`;
+  }
+  if (toolName === "complete_task") {
+    return `🔒 ${label}\n\nОтмечу задачу «${args.taskQuery ?? args.taskId}» выполненной в деле «${args.caseQuery ?? args.caseId}».\n\nРазрешаете?`;
   }
   return `🔒 Запрос на действие: ${label}\n\nПараметры: ${JSON.stringify(args, null, 0).slice(0, 200)}\n\nРазрешаете?`;
 }

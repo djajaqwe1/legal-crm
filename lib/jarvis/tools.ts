@@ -240,6 +240,31 @@ export const JARVIS_TOOLS = [
     },
   },
   {
+    name: "list_case_tasks",
+    description: "Список задач конкретного дела по коду, названию или клиенту.",
+    parameters: {
+      type: SchemaType.OBJECT,
+      properties: {
+        caseId: { type: SchemaType.STRING },
+        caseQuery: { type: SchemaType.STRING },
+      },
+    },
+  },
+  {
+    name: "complete_task",
+    description: "Отметить задачу в деле выполненной. Требует подтверждения.",
+    parameters: {
+      type: SchemaType.OBJECT,
+      properties: {
+        caseId: { type: SchemaType.STRING },
+        caseQuery: { type: SchemaType.STRING },
+        taskQuery: { type: SchemaType.STRING, description: "Часть названия задачи" },
+        taskId: { type: SchemaType.STRING },
+      },
+      required: ["taskQuery"],
+    },
+  },
+  {
     name: "generate_for_case",
     description:
       "Сгенерировать претензию/иск/ходатайство по существующему делу из CRM и сохранить в карточку. Требует подтверждения.",

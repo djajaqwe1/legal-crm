@@ -9,6 +9,7 @@ import { useRouter } from "next/navigation";
 import { Check } from "lucide-react";
 import { documentStorageHint, isDownloadableDocument, isJarvisGeneratedDocument } from "@/lib/document-utils";
 import { DownloadPdfButton } from "@/components/crm/download-pdf-button";
+import { DownloadDocxButton } from "@/components/crm/download-docx-button";
 
 type Task = {
   id: string;
@@ -66,7 +67,10 @@ export function DocumentItem({ doc }: { doc: Document }) {
           </a>
         )}
         {!downloadable && isJarvisGeneratedDocument(doc.path) && doc.extractedText && (
-          <DownloadPdfButton title={doc.name.replace(/\.txt$/i, "")} text={doc.extractedText} className="ml-2 shrink-0" />
+          <div className="ml-2 flex shrink-0 gap-1">
+            <DownloadPdfButton title={doc.name.replace(/\.txt$/i, "")} text={doc.extractedText} />
+            <DownloadDocxButton title={doc.name.replace(/\.txt$/i, "")} text={doc.extractedText} />
+          </div>
         )}
       </div>
       {expanded && hasText && (

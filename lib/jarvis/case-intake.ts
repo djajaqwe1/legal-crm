@@ -1,5 +1,7 @@
 /** Разбор голосовых/текстовых заявок «новое дело + документ». */
 
+import { parseDeadlinePhrase } from "./date-parse";
+
 export type CaseIntakeParsed = {
   clientName: string;
   title: string;
@@ -9,12 +11,6 @@ export type CaseIntakeParsed = {
   adiletQuery: string;
   workflowId?: "pretension_flow" | "court_first_instance" | "consultation_intake";
 };
-
-function addDays(base: Date, days: number): string {
-  const d = new Date(base);
-  d.setDate(d.getDate() + days);
-  return d.toISOString().slice(0, 10);
-}
 
 function capitalizeSentence(s: string): string {
   const t = s.trim();
@@ -60,7 +56,7 @@ export function isOperationalRequest(text: string): boolean {
     /нов(ое|ый)\s+дел|создай\s+дел|зарегистрируй\s+дел|открой\s+дел\s+для/.test(t) ||
     /нужн(а|о|ы)?\s+(претенз|иск|ходатай|договор|документ)|состав(ь|ить)|подготов(ь|ить)|сгенериру/.test(t) ||
     /дедлайн\s+через|через\s+\d+\s+(недел|день|дня|дней)/.test(t) ||
-    /добав(ь|ить)\s+задач|обнов(и|ить)\s+дел|создай\s+клиент/.test(t)
+    /добав(ь|ить)\s+задач|обнов(и|ить)\s+дел|создай\s+клиент|перенеси\s+дедлайн|отметь\s+задач|выполни\s+задач/.test(t)
   );
 }
 
@@ -77,11 +73,11 @@ export function parseCaseIntakeRequest(text: string): CaseIntakeParsed | null {
   const clientName = extractClientName(raw) ?? raw.match(/дело\s+([A-Za-zА-Яа-яЁё][^\s,—-]+)/i)?.[1]?.trim();
   if (!clientName) return null;
 
+  const deadlineMatch = raw.match(/(?:дедлайн\s+)?через\s+(\d+)\s+(недел|дн)/i);
   let deadline: string | undefined;
-  const weeksMatch = raw.match(/через\s+(\d+)\s+недел/i);
-  const daysMatch = raw.match(/через\s+(\d+)\s+дн/i);
-  if (weeksMatch) deadline = addDays(new Date(), Number(weeksMatch[1]) * 7);
-  else if (daysMatch) deadline = addDays(new Date(), Number(daysMatch[1]));
+  if (deadlineMatch) {
+    deadline = parseDeadlinePhrase(`через ${deadlineMatch[1]} ${deadlineMatch[2]}`) ?? undefined;
+  }
 
   let documentType: CaseIntakeParsed["documentType"];
   if (/претенз/i.test(raw)) documentType = "претензия";

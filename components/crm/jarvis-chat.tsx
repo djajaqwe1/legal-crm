@@ -6,8 +6,10 @@ import { Send, Mic, MicOff, Loader2, CheckCircle, XCircle, Paperclip, X, Chevron
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { DownloadPdfButton } from "@/components/crm/download-pdf-button";
+import { DownloadDocxButton } from "@/components/crm/download-docx-button";
 import { useJarvisVoice, isVoiceConfirm } from "@/components/crm/use-jarvis-voice";
 import { JARVIS_PRESETS, getPreset, type JarvisPresetId } from "@/lib/jarvis/presets";
+import { VOICE_COMMAND_EXAMPLES } from "@/lib/jarvis/voice-commands";
 import type { JarvisAction, JarvisStep } from "@/lib/jarvis/types";
 import { TOOL_LABELS } from "@/lib/jarvis/types";
 
@@ -33,12 +35,7 @@ type Props = {
   onSessionTitle?: (title: string) => void;
 };
 
-const SUGGESTIONS = [
-  "Покажи статистику CRM",
-  "Расширенная аналитика дел",
-  "Последние 5 дел",
-  "Что просрочено?",
-];
+const SUGGESTIONS = VOICE_COMMAND_EXAMPLES.slice(0, 6);
 
 function ResultCard({ toolName, data }: { toolName: string; data: ToolResult }) {
   if (!data) return null;
@@ -139,8 +136,12 @@ function ResultCard({ toolName, data }: { toolName: string; data: ToolResult }) 
         {d.document?.text && (
           <>
             <p className="text-[11px] uppercase tracking-wide text-zinc-400">Черновик {d.document.type ?? "документа"}</p>
-            <div className="mb-2">
+            <div className="mb-2 flex flex-wrap gap-2">
               <DownloadPdfButton
+                title={`${d.case.code ?? "document"}-${d.document.type ?? "doc"}`}
+                text={d.document.text}
+              />
+              <DownloadDocxButton
                 title={`${d.case.code ?? "document"}-${d.document.type ?? "doc"}`}
                 text={d.document.text}
               />
@@ -172,9 +173,31 @@ function ResultCard({ toolName, data }: { toolName: string; data: ToolResult }) 
             ))}
           </div>
         )}
-        <DownloadPdfButton title={d.type} text={d.text} />
+        <div className="flex flex-wrap gap-2">
+          <DownloadPdfButton title={d.type} text={d.text} />
+          <DownloadDocxButton title={d.type} text={d.text} />
+        </div>
         <pre className="max-h-64 overflow-y-auto rounded-xl border border-zinc-200/80 bg-zinc-50/50 p-4 text-[13px] leading-relaxed whitespace-pre-wrap dark:border-zinc-800 dark:bg-zinc-900/30">
           {d.text}
+        </pre>
+      </div>
+    );
+  }
+  if (toolName === "generate_for_case" && typeof data === "object" && data && "document" in data) {
+    const d = data as {
+      caseCode?: string;
+      document?: { type?: string; text?: string } | null;
+    };
+    if (!d.document?.text) return null;
+    const exportTitle = `${d.caseCode ?? "case"}-${d.document.type ?? "doc"}`;
+    return (
+      <div className="mt-3 space-y-2">
+        <div className="flex flex-wrap gap-2">
+          <DownloadPdfButton title={exportTitle} text={d.document.text} />
+          <DownloadDocxButton title={exportTitle} text={d.document.text} />
+        </div>
+        <pre className="max-h-64 overflow-y-auto rounded-xl border border-zinc-200/80 bg-zinc-50/50 p-4 text-[13px] leading-relaxed whitespace-pre-wrap dark:border-zinc-800 dark:bg-zinc-900/30">
+          {d.document.text}
         </pre>
       </div>
     );

@@ -127,30 +127,52 @@ export async function POST(req: Request) {
     // Голосовые команды: «открой дело», «обнови статус», «добавь задачу»
     const voiceCmd = matchVoiceCommand(lastText);
     if (voiceCmd && !voiceConfirmed) {
-      if (voiceCmd.instant && voiceCmd.toolName === "open_case") {
-        const found = await executeJarvisTool(wid, "find_case", {
-          query: String(voiceCmd.args.query ?? ""),
-        });
-        const caseRow = found.data as { id: string; code: string; title: string } | null;
-        const reply = caseRow
-          ? `Открываю дело ${caseRow.code} — ${caseRow.title}`
-          : found.message;
+      if (voiceCmd.instant) {
+        if (voiceCmd.toolName === "open_case") {
+          const found = await executeJarvisTool(wid, "find_case", {
+            query: String(voiceCmd.args.query ?? ""),
+          });
+          const caseRow = found.data as { id: string; code: string; title: string } | null;
+          const reply = caseRow
+            ? `Открываю дело ${caseRow.code} — ${caseRow.title}`
+            : found.message;
 
-        await appendJarvisMessages(sessionId, [
-          { role: "user", content: lastText },
-          { role: "assistant", content: reply, metadata: { toolUsed: "find_case", toolResult: found.data } },
-        ]);
+          await appendJarvisMessages(sessionId, [
+            { role: "user", content: lastText },
+            { role: "assistant", content: reply, metadata: { toolUsed: "find_case", toolResult: found.data } },
+          ]);
 
-        return NextResponse.json({
-          reply,
-          toolUsed: "find_case",
-          toolResult: found.data,
-          actions: caseRow
-            ? [{ type: "navigate", path: `/admin/cases/${caseRow.id}`, label: caseRow.code }]
-            : [],
-          needsConfirmation: false,
-          sessionId,
-        });
+          return NextResponse.json({
+            reply,
+            toolUsed: "find_case",
+            toolResult: found.data,
+            actions: caseRow
+              ? [{ type: "navigate", path: `/admin/cases/${caseRow.id}`, label: caseRow.code }]
+              : [],
+            needsConfirmation: false,
+            sessionId,
+          });
+        }
+
+        if (voiceCmd.toolName === "list_case_tasks") {
+          const result = await executeJarvisTool(wid, "list_case_tasks", voiceCmd.args);
+          await appendJarvisMessages(sessionId, [
+            { role: "user", content: lastText },
+            {
+              role: "assistant",
+              content: result.message,
+              metadata: { toolUsed: "list_case_tasks", toolResult: result.data },
+            },
+          ]);
+          return NextResponse.json({
+            reply: result.message,
+            toolUsed: "list_case_tasks",
+            toolResult: result.data,
+            actions: result.actions,
+            needsConfirmation: false,
+            sessionId,
+          });
+        }
       }
 
       const args = { ...voiceCmd.args };
