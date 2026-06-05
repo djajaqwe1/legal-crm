@@ -9,6 +9,7 @@ import {
   parseCaseIntakeRequest,
   buildIntakeConfirmReply,
 } from "@/lib/jarvis/case-intake";
+import { matchVoiceCommand } from "@/lib/jarvis/voice-commands";
 import { searchLegalGrounding } from "@/lib/legal-grounding/adilet-search";
 import { READ_ONLY_TOOLS } from "@/lib/jarvis/types";
 import { VOICE_CONFIRM_RE } from "@/lib/jarvis/types";
@@ -122,6 +123,71 @@ export async function POST(req: Request) {
 
     const snapshot = await buildWorkspaceSnapshot(wid);
     const systemPrompt = buildJarvisSystemPrompt(snapshot, pageContext);
+
+    // Голосовые команды: «открой дело», «обнови статус», «добавь задачу»
+    const voiceCmd = matchVoiceCommand(lastText);
+    if (voiceCmd && !voiceConfirmed) {
+      if (voiceCmd.instant && voiceCmd.toolName === "open_case") {
+        const found = await executeJarvisTool(wid, "find_case", {
+          query: String(voiceCmd.args.query ?? ""),
+        });
+        const caseRow = found.data as { id: string; code: string; title: string } | null;
+        const reply = caseRow
+          ? `Открываю дело ${caseRow.code} — ${caseRow.title}`
+          : found.message;
+
+        await appendJarvisMessages(sessionId, [
+          { role: "user", content: lastText },
+          { role: "assistant", content: reply, metadata: { toolUsed: "find_case", toolResult: found.data } },
+        ]);
+
+        return NextResponse.json({
+          reply,
+          toolUsed: "find_case",
+          toolResult: found.data,
+          actions: caseRow
+            ? [{ type: "navigate", path: `/admin/cases/${caseRow.id}`, label: caseRow.code }]
+            : [],
+          needsConfirmation: false,
+          sessionId,
+        });
+      }
+
+      const args = { ...voiceCmd.args };
+      if (args.caseQuery) {
+        const found = await executeJarvisTool(wid, "find_case", { query: String(args.caseQuery) });
+        const caseRow = found.data as { id: string; code: string } | null;
+        if (!caseRow) {
+          const reply = `Дело «${args.caseQuery}» не найдено. Уточните код или клиента.`;
+          await appendJarvisMessages(sessionId, [
+            { role: "user", content: lastText },
+            { role: "assistant", content: reply },
+          ]);
+          return NextResponse.json({ reply, needsConfirmation: false, sessionId });
+        }
+        args.caseId = caseRow.id;
+        delete args.caseQuery;
+      }
+
+      const pendingAction = { toolName: voiceCmd.toolName, args };
+      const reply = voiceCmd.confirmReply;
+
+      await appendJarvisMessages(sessionId, [
+        { role: "user", content: lastText },
+        {
+          role: "assistant",
+          content: reply,
+          metadata: { needsConfirmation: true, pendingAction },
+        },
+      ]);
+
+      return NextResponse.json({
+        reply,
+        pendingAction,
+        needsConfirmation: true,
+        sessionId,
+      });
+    }
 
     // Голосовой/текстовый intake: «новое дело для X … нужна претензия»
     const intake = parseCaseIntakeRequest(lastText);

@@ -7,7 +7,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Plus, CheckCircle2, FileText, Loader2, Upload, Download, Trash2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { Check } from "lucide-react";
-import { documentStorageHint, isDownloadableDocument } from "@/lib/document-utils";
+import { documentStorageHint, isDownloadableDocument, isJarvisGeneratedDocument } from "@/lib/document-utils";
+import { DownloadPdfButton } from "@/components/crm/download-pdf-button";
 
 type Task = {
   id: string;
@@ -63,6 +64,9 @@ export function DocumentItem({ doc }: { doc: Document }) {
               <Download className="h-3.5 w-3.5" />
             </Button>
           </a>
+        )}
+        {!downloadable && isJarvisGeneratedDocument(doc.path) && doc.extractedText && (
+          <DownloadPdfButton title={doc.name.replace(/\.txt$/i, "")} text={doc.extractedText} className="ml-2 shrink-0" />
         )}
       </div>
       {expanded && hasText && (

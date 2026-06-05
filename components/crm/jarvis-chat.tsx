@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Send, Mic, MicOff, Loader2, CheckCircle, XCircle, Paperclip, X, ChevronDown } from "lucide-react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
+import { DownloadPdfButton } from "@/components/crm/download-pdf-button";
 import { useJarvisVoice, isVoiceConfirm } from "@/components/crm/use-jarvis-voice";
 import { JARVIS_PRESETS, getPreset, type JarvisPresetId } from "@/lib/jarvis/presets";
 import type { JarvisAction, JarvisStep } from "@/lib/jarvis/types";
@@ -138,6 +139,12 @@ function ResultCard({ toolName, data }: { toolName: string; data: ToolResult }) 
         {d.document?.text && (
           <>
             <p className="text-[11px] uppercase tracking-wide text-zinc-400">Черновик {d.document.type ?? "документа"}</p>
+            <div className="mb-2">
+              <DownloadPdfButton
+                title={`${d.case.code ?? "document"}-${d.document.type ?? "doc"}`}
+                text={d.document.text}
+              />
+            </div>
             <pre className="max-h-64 overflow-y-auto rounded-xl border border-zinc-200/80 bg-zinc-50/50 p-4 text-[13px] leading-relaxed whitespace-pre-wrap dark:border-zinc-800 dark:bg-zinc-900/30">
               {d.document.text}
             </pre>
@@ -165,6 +172,7 @@ function ResultCard({ toolName, data }: { toolName: string; data: ToolResult }) 
             ))}
           </div>
         )}
+        <DownloadPdfButton title={d.type} text={d.text} />
         <pre className="max-h-64 overflow-y-auto rounded-xl border border-zinc-200/80 bg-zinc-50/50 p-4 text-[13px] leading-relaxed whitespace-pre-wrap dark:border-zinc-800 dark:bg-zinc-900/30">
           {d.text}
         </pre>
@@ -472,8 +480,8 @@ export function JarvisChat({ sessionId, onSessionActivity, onSessionTitle }: Pro
       }
       const merged = inputRef.current.trim() ? `${inputRef.current.trim()} ${text}` : text;
       inputRef.current = merged;
-      // Голосовой оператор: длинная речь → сразу в работу без Enter
-      if (presetId === "chat" && merged.trim().length >= 12) {
+      // Голосовой оператор: после записи — сразу в работу (кроме загрузки файлов)
+      if (presetId !== "register_case" && merged.trim().length >= 12) {
         setInput("");
         inputRef.current = "";
         void sendRef.current(merged.trim());

@@ -240,6 +240,20 @@ export const JARVIS_TOOLS = [
     },
   },
   {
+    name: "generate_for_case",
+    description:
+      "Сгенерировать претензию/иск/ходатайство по существующему делу из CRM и сохранить в карточку. Требует подтверждения.",
+    parameters: {
+      type: SchemaType.OBJECT,
+      properties: {
+        caseId: { type: SchemaType.STRING },
+        documentType: { type: SchemaType.STRING, enum: ["претензия", "иск", "ходатайство"] },
+        extraNotes: { type: SchemaType.STRING },
+      },
+      required: ["caseId", "documentType"],
+    },
+  },
+  {
     name: "generate_document",
     description:
       "Сгенерировать юридический документ по шаблону РК. Сначала search_adilet. Требует подтверждения юриста.",

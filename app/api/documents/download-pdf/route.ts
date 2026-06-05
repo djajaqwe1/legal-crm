@@ -19,7 +19,8 @@ export async function POST(request: Request) {
 
     // Приоритет шрифтов: bundled DejaVuSans (кириллица), системные шрифты, дефолт
     const fontCandidates = [
-      path.join(/*turbopackIgnore: true*/ process.cwd(), "public", "fonts", "DejaVuSans.ttf"),
+      path.join(process.cwd(), "public", "fonts", "DejaVuSans.ttf"),
+      path.join(process.cwd(), "node_modules", "dejavu-fonts-ttf", "ttf", "DejaVuSans.ttf"),
       "C:\\Windows\\Fonts\\arial.ttf",
       "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
       "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",

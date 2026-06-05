@@ -55,6 +55,7 @@ export const MUTATING_TOOLS = new Set([
   "apply_case_checklist",
   "generate_document",
   "intake_new_case",
+  "generate_for_case",
 ]);
 
 export const TOOL_LABELS: Record<string, string> = {
@@ -66,6 +67,7 @@ export const TOOL_LABELS: Record<string, string> = {
   apply_case_checklist: "Применить чеклист",
   generate_document: "Сгенерировать документ",
   intake_new_case: "Полный intake: дело + чеклист + документ",
+  generate_for_case: "Документ по существующему делу",
 };
 
 export const VOICE_CONFIRM_RE =

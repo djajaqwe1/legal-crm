@@ -22,9 +22,9 @@ export type JarvisPreset = {
 export const JARVIS_PRESETS: JarvisPreset[] = [
   {
     id: "chat",
-    label: "Свободный чат",
-    description: "Голосовой монолог → Джарвис выполняет за вас",
-    placeholder: "Опишите задачу или нажмите микрофон и говорите до остановки…",
+    label: "Голосовой оператор",
+    description: "Говорите — система выполняет: дела, задачи, документы",
+    placeholder: "Или нажмите микрофон и говорите до остановки…",
   },
   {
     id: "register_case",

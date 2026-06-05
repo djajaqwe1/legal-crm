@@ -48,6 +48,25 @@ async function findCaseByQuery(workspaceId: string, query: string) {
   });
 }
 
+async function resolveCaseId(
+  workspaceId: string,
+  args: Record<string, unknown>,
+): Promise<{ caseId: string; caseCode: string } | { error: string }> {
+  if (typeof args.caseId === "string" && args.caseId.trim()) {
+    const c = await prisma.legalCase.findFirst({
+      where: { id: args.caseId.trim(), workspaceId },
+      select: { id: true, code: true },
+    });
+    if (!c) return { error: "Дело не найдено" };
+    return { caseId: c.id, caseCode: c.code };
+  }
+  const q = typeof args.caseQuery === "string" ? args.caseQuery : "";
+  if (!q.trim()) return { error: "Укажите дело" };
+  const found = await findCaseByQuery(workspaceId, q);
+  if (!found) return { error: `Дело «${q}» не найдено` };
+  return { caseId: found.id, caseCode: found.code };
+}
+
 export async function executeJarvisTool(
   workspaceId: string,
   toolName: string,
@@ -141,7 +160,10 @@ export async function executeJarvisTool(
   }
 
   if (toolName === "apply_case_checklist") {
-    const { caseId, workflowId } = args as { caseId: string; workflowId: CaseWorkflowId };
+    const { workflowId } = args as { caseId?: string; caseQuery?: string; workflowId: CaseWorkflowId };
+    const resolved = await resolveCaseId(workspaceId, args);
+    if ("error" in resolved) return { success: false, message: resolved.error };
+    const { caseId } = resolved;
     const result = await applyCaseWorkflow(caseId, workflowId, { workspaceId });
     actions.push({ type: "navigate", path: `/admin/cases/${caseId}` });
     actions.push({ type: "refresh" });
@@ -377,7 +399,10 @@ export async function executeJarvisTool(
   }
 
   if (toolName === "update_case") {
-    const { caseId, field, value } = args as { caseId: string; field: string; value: string };
+    const { field, value } = args as { caseId?: string; caseQuery?: string; field: string; value: string };
+    const resolved = await resolveCaseId(workspaceId, args);
+    if ("error" in resolved) return { success: false, message: resolved.error };
+    const caseId = resolved.caseId;
     const existingCase = await prisma.legalCase.findFirst({
       where: { id: caseId, workspaceId },
     });
@@ -404,7 +429,10 @@ export async function executeJarvisTool(
   }
 
   if (toolName === "add_task") {
-    const { caseId, title, dueDate } = args as { caseId: string; title: string; dueDate?: string };
+    const { title, dueDate } = args as { caseId?: string; caseQuery?: string; title: string; dueDate?: string };
+    const resolved = await resolveCaseId(workspaceId, args);
+    if ("error" in resolved) return { success: false, message: resolved.error };
+    const caseId = resolved.caseId;
     const legalCase = await prisma.legalCase.findFirst({
       where: { id: caseId, workspaceId },
     });
@@ -541,6 +569,66 @@ export async function executeJarvisTool(
     };
   }
 
+  if (toolName === "generate_for_case") {
+    const { documentType, extraNotes } = args as {
+      caseId?: string;
+      caseQuery?: string;
+      documentType: string;
+      extraNotes?: string;
+    };
+    const resolved = await resolveCaseId(workspaceId, args);
+    if ("error" in resolved) return { success: false, message: resolved.error };
+    const { caseId, caseCode } = resolved;
+
+    const legalCase = await prisma.legalCase.findFirst({
+      where: { id: caseId, workspaceId },
+      include: { client: true, tasks: { where: { completed: false }, take: 5 } },
+    });
+    if (!legalCase) return { success: false, message: "Дело не найдено" };
+
+    const context = [
+      legalCase.description,
+      legalCase.title,
+      extraNotes,
+      legalCase.tasks.length
+        ? `Открытые задачи: ${legalCase.tasks.map(t => t.title).join("; ")}`
+        : null,
+    ]
+      .filter(Boolean)
+      .join("\n");
+
+    const docResult = await executeJarvisTool(workspaceId, "generate_document", {
+      type: documentType,
+      description: context,
+      clientName: legalCase.client?.name,
+    });
+    if (!docResult.success || !docResult.data) return docResult;
+
+    const docText = (docResult.data as { text?: string }).text;
+    if (docText) {
+      try {
+        await addDocument(caseId, `${documentType}-${caseCode}.txt`, "#jarvis-generated", {
+          category: "correspondence",
+          storageProvider: "crm",
+          mimeType: "text/plain",
+          sizeBytes: Buffer.byteLength(docText, "utf8"),
+          extractedText: docText,
+        });
+      } catch {
+        /* generated but not saved */
+      }
+    }
+
+    actions.push({ type: "navigate", path: `/admin/cases/${caseId}`, label: caseCode });
+    actions.push({ type: "refresh" });
+    return {
+      success: true,
+      data: { case: { id: caseId, code: caseCode, title: legalCase.title }, document: docResult.data },
+      message: `«${documentType}» для ${caseCode} готов и сохранён в дело`,
+      actions,
+    };
+  }
+
   if (toolName === "generate_document") {
     const { type, description, clientName } = args as {
       type: string; description: string; clientName?: string;
@@ -635,6 +723,9 @@ export function buildConfirmText(toolName: string, args: Record<string, unknown>
       ? new Date(String(args.deadline)).toLocaleDateString("ru-RU")
       : "не указан";
     return `🔒 Полный intake дела\n\n• Клиент: «${args.clientName}»\n• Дело: «${args.title}»\n• Дедлайн: ${deadlineRu}${args.documentType ? `\n• Документ: ${args.documentType}` : ""}\n\nСоздам дело, чеклист и черновик документа.\n\nРазрешаете?`;
+  }
+  if (toolName === "generate_for_case") {
+    return `🔒 ${label}\n\nПодготовлю «${args.documentType}» и сохраню в дело (id: ${args.caseId ?? args.caseQuery}).\n\nРазрешаете?`;
   }
   return `🔒 Запрос на действие: ${label}\n\nПараметры: ${JSON.stringify(args, null, 0).slice(0, 200)}\n\nРазрешаете?`;
 }

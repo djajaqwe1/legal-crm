@@ -92,6 +92,15 @@ async function main() {
   const lawData = await lawRes.json();
   ok("Jarvis adilet-only", lawRes.ok && lawData.toolUsed === "search_adilet", lawData.toolUsed ?? "?");
 
+  // 8. Voice: open case
+  const openRes = await fetch(`${BASE}/api/ai/jarvis`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Cookie: cookieHeader() },
+    body: JSON.stringify({ messages: [{ role: "user", content: "открой реестр дел" }] }),
+  });
+  const openData = await openRes.json();
+  ok("Jarvis navigate cases", openRes.ok && openData.toolUsed === "navigate_to", openData.toolUsed ?? "?");
+
   const failed = tests.filter((t) => !t.pass);
   console.log(`\n${tests.length - failed.length}/${tests.length} passed`);
   if (failed.length) {
