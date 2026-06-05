@@ -5,6 +5,12 @@ import { Sparkles, X, Send, Mic, MicOff, Loader2, ChevronDown, CheckCircle, XCir
 import { Textarea } from "@/components/ui/textarea";
 import { useRouter } from "next/navigation";
 import type { JarvisAction } from "@/lib/jarvis/types";
+import {
+  useJarvisVoice,
+  isVoiceConfirm,
+  speakJarvis,
+} from "@/components/crm/use-jarvis-voice";
+import { isVoiceDeny } from "@/lib/jarvis/types";
 
 type PendingAction = { toolName: string; args: Record<string, unknown> };
 
@@ -28,12 +34,12 @@ export function PageAssistantPanel({ pageContext }: Props) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
-  const [isListening, setIsListening] = useState(false);
   const [pendingAction, setPendingAction] = useState<PendingAction | null>(null);
   const endRef = useRef<HTMLDivElement>(null);
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const recognitionRef = useRef<any>(null);
+  const pendingRef = useRef<PendingAction | null>(null);
   const router = useRouter();
+
+  pendingRef.current = pendingAction;
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -42,8 +48,8 @@ export function PageAssistantPanel({ pageContext }: Props) {
   useEffect(() => {
     if (open && messages.length === 0) {
       const greeting = pageContext
-        ? `Привет! Я Джарвис. Контекст: ${pageContext}. Чем помочь?`
-        : "Привет! Я Джарвис. Могу создать дело, найти клиента, показать статистику.";
+        ? `Привет! Я Джарвис. Контекст: ${pageContext}. Говорите задачу голосом — создам дело, задачу или документ.`
+        : "Привет! Я Джарвис. Говорите голосом или текстом — выполню команды CRM. Для изменений спрошу «Разрешаю?»";
       startTransition(() => {
         setMessages([{ id: "init", role: "assistant", content: greeting }]);
       });
@@ -110,6 +116,13 @@ export function PageAssistantPanel({ pageContext }: Props) {
 
       setMessages(prev => [...prev, assistantMsg]);
 
+      if (data.reply && !data.needsConfirmation) {
+        speakJarvis(data.reply);
+      }
+      if (data.needsConfirmation && data.reply) {
+        speakJarvis(`${data.reply} Скажите «разрешаю» или «отмена».`);
+      }
+
       if (data.actions?.length) {
         for (const a of data.actions) {
           if (a.type === "navigate") router.push(a.path);
@@ -121,8 +134,7 @@ export function PageAssistantPanel({ pageContext }: Props) {
         setPendingAction(data.pendingAction);
       } else {
         setPendingAction(null);
-        // Refresh page if a mutating action completed
-        if (data.toolUsed && ["create_case", "create_client", "update_case", "create_contract", "add_task"].includes(data.toolUsed)) {
+        if (data.toolUsed && ["create_case", "create_client", "update_case", "create_contract", "add_task", "intake_new_case", "generate_for_case", "complete_task"].includes(data.toolUsed)) {
           router.refresh();
         }
       }
@@ -157,39 +169,37 @@ export function PageAssistantPanel({ pageContext }: Props) {
     ]);
   }, [pendingAction]);
 
-  const toggleListening = useCallback(() => {
-    if (isListening) {
-      recognitionRef.current?.stop();
-      setIsListening(false);
-      return;
+  const onRecordingComplete = useCallback((text: string) => {
+    const t = text.trim();
+    if (!t) return;
+
+    if (pendingRef.current) {
+      if (isVoiceConfirm(t)) {
+        void handleConfirm();
+        return;
+      }
+      if (isVoiceDeny(t)) {
+        handleDeny();
+        return;
+      }
     }
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const w = window as any;
-    const SR = w.SpeechRecognition ?? w.webkitSpeechRecognition;
-    if (!SR) { alert("Распознавание речи не поддерживается. Используйте Chrome."); return; }
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const recognition: any = new SR();
-    recognition.lang = "ru-RU";
-    recognition.continuous = false;
-    recognitionRef.current = recognition;
-    recognition.onstart = () => setIsListening(true);
-    recognition.onend = () => setIsListening(false);
-    recognition.onerror = () => setIsListening(false);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    recognition.onresult = (e: any) => {
-      const t = (e.results[0]?.[0]?.transcript ?? "") as string;
-      if (t.trim()) sendMessage(t);
-    };
-    recognition.start();
-  }, [isListening, sendMessage]);
+
+    void sendMessage(t);
+  }, [handleConfirm, handleDeny, sendMessage]);
+
+  const {
+    isListening,
+    interim,
+    recordingDuration,
+    toggleListening,
+  } = useJarvisVoice({ onRecordingComplete, mode: "accumulate" });
 
   function handleKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
-    if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMessage(input); }
+    if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); void sendMessage(input); }
   }
 
   return (
     <>
-      {/* Floating button */}
       {!open && (
         <button
           onClick={() => setOpen(true)}
@@ -200,17 +210,19 @@ export function PageAssistantPanel({ pageContext }: Props) {
         </button>
       )}
 
-      {/* Panel */}
       {open && (
         <div className="fixed bottom-6 right-6 z-50 w-[360px] max-h-[540px] flex flex-col rounded-2xl border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-950 shadow-2xl shadow-black/20 animate-in slide-in-from-bottom-4 fade-in duration-200">
-          {/* Header */}
           <div className="flex items-center justify-between px-4 py-3 border-b border-zinc-100 dark:border-zinc-800 shrink-0">
             <div className="flex items-center gap-2">
               <div className="h-7 w-7 rounded-full bg-gradient-to-br from-blue-500 to-violet-600 flex items-center justify-center">
                 <Sparkles className="h-3.5 w-3.5 text-white" />
               </div>
               <span className="text-sm font-semibold">Джарвис</span>
-              <span className="h-1.5 w-1.5 rounded-full bg-green-500" />
+              {isListening ? (
+                <span className="text-[10px] font-medium text-red-500 animate-pulse">{recordingDuration}</span>
+              ) : (
+                <span className="h-1.5 w-1.5 rounded-full bg-green-500" />
+              )}
             </div>
             <button onClick={() => setOpen(false)}
               className="h-7 w-7 rounded-full flex items-center justify-center text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors">
@@ -218,7 +230,6 @@ export function PageAssistantPanel({ pageContext }: Props) {
             </button>
           </div>
 
-          {/* Messages */}
           <div className="flex-1 overflow-y-auto p-4 space-y-3 min-h-0">
             {messages.map(msg => (
               <div key={msg.id} className={`flex gap-2 ${msg.role === "user" ? "flex-row-reverse" : "flex-row"}`}>
@@ -233,13 +244,12 @@ export function PageAssistantPanel({ pageContext }: Props) {
                     {msg.content}
                   </div>
 
-                  {/* Confirmation buttons — only for the current active pending action */}
                   {msg.needsConfirmation && !msg.confirmed && !msg.denied &&
                    msg.pendingAction && pendingAction &&
                    msg.pendingAction.toolName === pendingAction.toolName && (
                     <div className="flex gap-1.5">
                       <button
-                        onClick={handleConfirm}
+                        onClick={() => void handleConfirm()}
                         disabled={isLoading}
                         className="flex items-center gap-1 rounded-lg bg-green-600 px-2.5 py-1.5 text-[10px] font-bold text-white hover:bg-green-700 disabled:opacity-50 transition-colors"
                       >
@@ -266,6 +276,9 @@ export function PageAssistantPanel({ pageContext }: Props) {
                 </div>
               </div>
             ))}
+            {isListening && interim && (
+              <p className="text-[10px] italic text-zinc-400 px-1">{interim}</p>
+            )}
             {isLoading && (
               <div className="flex gap-2">
                 <div className="rounded-2xl rounded-tl-sm bg-zinc-100 dark:bg-zinc-800 px-3 py-2">
@@ -276,13 +289,12 @@ export function PageAssistantPanel({ pageContext }: Props) {
             <div ref={endRef} />
           </div>
 
-          {/* Input */}
           <div className="p-3 border-t border-zinc-100 dark:border-zinc-800 flex gap-2 shrink-0">
             <Textarea
               value={input}
               onChange={e => setInput(e.target.value)}
               onKeyDown={handleKeyDown}
-              placeholder="Спросить или дать команду..."
+              placeholder={pendingAction ? "Скажите «разрешаю» или «отмена»…" : "Говорите или пишите команду…"}
               className="resize-none min-h-[36px] max-h-[80px] text-xs dark:bg-zinc-900 dark:border-zinc-700"
               rows={1}
               disabled={isLoading}
@@ -295,11 +307,12 @@ export function PageAssistantPanel({ pageContext }: Props) {
                     ? "bg-red-100 dark:bg-red-900/30 text-red-600"
                     : "bg-zinc-100 dark:bg-zinc-800 text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100"
                 }`}
+                title={isListening ? "Остановить запись" : "Голосовая команда"}
               >
                 {isListening ? <MicOff className="h-3.5 w-3.5" /> : <Mic className="h-3.5 w-3.5" />}
               </button>
               <button
-                onClick={() => sendMessage(input)}
+                onClick={() => void sendMessage(input)}
                 disabled={!input.trim() || isLoading}
                 className="h-8 w-8 rounded-lg bg-blue-600 flex items-center justify-center text-white hover:bg-blue-700 disabled:opacity-40 transition-colors"
               >
@@ -308,7 +321,6 @@ export function PageAssistantPanel({ pageContext }: Props) {
             </div>
           </div>
 
-          {/* Collapse handle */}
           <button
             onClick={() => setOpen(false)}
             className="absolute -top-3 left-1/2 -translate-x-1/2 h-6 w-10 rounded-full bg-zinc-200 dark:bg-zinc-700 flex items-center justify-center text-zinc-500 hover:bg-zinc-300 dark:hover:bg-zinc-600 transition-colors"

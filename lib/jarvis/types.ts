@@ -75,3 +75,14 @@ export const TOOL_LABELS: Record<string, string> = {
 
 export const VOICE_CONFIRM_RE =
   /^(да|ага|ок|okay|yes|разрешаю|подтверждаю|подтверждаю действие|давай|выполняй|сделай|конечно|верно)\b/i;
+
+export const VOICE_DENY_RE =
+  /^(нет|не надо|отмена|отмени|стоп|cancel|не нужно|отклон|отклоняю|не делай)\b/i;
+
+export function isVoiceConfirm(text: string): boolean {
+  return VOICE_CONFIRM_RE.test(text.trim());
+}
+
+export function isVoiceDeny(text: string): boolean {
+  return VOICE_DENY_RE.test(text.trim());
+}

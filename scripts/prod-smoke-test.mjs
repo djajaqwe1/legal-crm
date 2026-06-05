@@ -101,6 +101,24 @@ async function main() {
   const openData = await openRes.json();
   ok("Jarvis navigate cases", openRes.ok && openData.toolUsed === "navigate_to", openData.toolUsed ?? "?");
 
+// 9. Morning brief voice
+  const briefRes = await fetch(`${BASE}/api/ai/jarvis`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Cookie: cookieHeader() },
+    body: JSON.stringify({ messages: [{ role: "user", content: "мой рабочий день" }] }),
+  });
+  const briefData = await briefRes.json();
+  ok("Jarvis morning brief", briefRes.ok && briefData.toolUsed === "get_lawyer_daily", briefData.toolUsed ?? "?");
+
+  // 10. Create client voice (confirmation only)
+  const clientRes = await fetch(`${BASE}/api/ai/jarvis`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Cookie: cookieHeader() },
+    body: JSON.stringify({ messages: [{ role: "user", content: "создай клиента Тестов Голос" }] }),
+  });
+  const clientData = await clientRes.json();
+  ok("Jarvis create client confirm", clientRes.ok && clientData.needsConfirmation === true && clientData.pendingAction?.toolName === "create_client", clientData.pendingAction?.toolName ?? "?");
+
   const failed = tests.filter((t) => !t.pass);
   console.log(`\n${tests.length - failed.length}/${tests.length} passed`);
   if (failed.length) {

@@ -54,7 +54,7 @@ export default async function CaseDetailPage({ params }: PageProps) {
   const statusLabel = caseStatusToRu[caseData.status] ?? caseData.status;
 
   return (
-    <CrmShell hideAssistant pageContext={`Детали дела: "${caseData.title}". Клиент: ${caseData.client.name}. Статус: ${statusLabel}. Задач: ${caseData.tasks.length}, документов: ${caseData.documents.length}.`}>
+    <CrmShell pageContext={`Дело ${caseData.code} (caseId:${caseData.id}): «${caseData.title}». Клиент: ${caseData.client.name}. Статус: ${statusLabel}. Задач: ${caseData.tasks.length}, документов: ${caseData.documents.length}.`}>
       <header className="space-y-4 mb-8">
         <nav className="flex items-center gap-2 text-xs font-medium text-zinc-500 uppercase tracking-wider">
           <Link href="/admin/dashboard" className="hover:text-zinc-900 transition-colors flex items-center gap-1">

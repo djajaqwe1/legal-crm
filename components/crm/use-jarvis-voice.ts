@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { VOICE_CONFIRM_RE } from "@/lib/jarvis/types";
+import { isVoiceConfirm, isVoiceDeny } from "@/lib/jarvis/types";
 
 type SpeechResultList = {
   length: number;
@@ -193,6 +193,24 @@ export function useJarvisVoice({
   };
 }
 
-export function isVoiceConfirm(text: string): boolean {
-  return VOICE_CONFIRM_RE.test(text.trim());
+export function isVoiceConfirmText(text: string): boolean {
+  return isVoiceConfirm(text);
 }
+
+export function isVoiceDenyText(text: string): boolean {
+  return isVoiceDeny(text);
+}
+
+/** Озвучить ответ Джарвиса (кратко) */
+export function speakJarvis(text: string, maxLen = 400) {
+  if (typeof window === "undefined" || !window.speechSynthesis) return;
+  const clean = text.replace(/\*\*/g, "").slice(0, maxLen);
+  window.speechSynthesis.cancel();
+  const utter = new SpeechSynthesisUtterance(clean);
+  utter.lang = "ru-RU";
+  utter.rate = 1.05;
+  window.speechSynthesis.speak(utter);
+}
+
+// Back-compat for jarvis-chat
+export { isVoiceConfirmText as isVoiceConfirm };

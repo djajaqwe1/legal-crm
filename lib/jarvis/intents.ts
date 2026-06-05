@@ -94,10 +94,40 @@ export function formatToolReply(
     return formatLawyerDailyReply(data as LawyerDailyBrief);
   }
 
+  if (toolName === "get_case_context" && data && typeof data === "object" && "code" in data) {
+    const d = data as {
+      code: string;
+      title: string;
+      status: string;
+      client: string;
+      deadline: string | null;
+      tasks: Array<{ title: string; completed: boolean; dueDate: string | null }>;
+      documents: Array<{ name: string }>;
+    };
+    const openTasks = d.tasks.filter(t => !t.completed);
+    const taskLines = openTasks.length
+      ? openTasks.map(t => `• ${t.title}${t.dueDate ? ` (${t.dueDate})` : ""}`).join("\n")
+      : "• Все задачи выполнены";
+    return [
+      `Дело ${d.code} — «${d.title}»`,
+      `Клиент: ${d.client} · Статус: ${d.status}${d.deadline ? ` · Дедлайн: ${d.deadline}` : ""}`,
+      `Документов: ${d.documents.length}`,
+      "",
+      `Открытые задачи (${openTasks.length}):`,
+      taskLines,
+    ].join("\n");
+  }
+
   if (toolName === "get_open_tasks" && Array.isArray(data)) {
     const rows = data as Array<{ caseCode: string; title: string; dueDate?: string | null }>;
     if (!rows.length) return "Открытых задач нет.";
     return `Открытые задачи (${rows.length}):\n${rows.map(r => `• ${r.caseCode}: ${r.title}${r.dueDate ? ` — ${r.dueDate}` : ""}`).join("\n")}`;
+  }
+
+  if (toolName === "get_clients" && Array.isArray(data)) {
+    const rows = data as Array<{ name: string; phone?: string; email?: string }>;
+    if (!rows.length) return "Клиенты не найдены.";
+    return rows.map(r => `• ${r.name}${r.phone ? ` · ${r.phone}` : ""}`).join("\n");
   }
 
   if (toolName === "search_adilet" && data && typeof data === "object" && "documents" in data) {
