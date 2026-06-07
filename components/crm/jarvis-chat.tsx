@@ -529,16 +529,6 @@ export function JarvisChat({
       }
       const merged = inputRef.current.trim() ? `${inputRef.current.trim()} ${text}` : text;
       inputRef.current = merged;
-      if (presetId === "register_case" || presetId === "attach_documents") {
-        setInput(merged);
-        return;
-      }
-      if (merged.trim().length >= 8) {
-        setInput("");
-        inputRef.current = "";
-        void sendRef.current(merged.trim());
-        return;
-      }
       setInput(merged);
     },
   });
@@ -816,7 +806,7 @@ export function JarvisChat({
               ? "Прикрепите материалы и отправьте — создам новое дело"
               : presetId === "attach_documents"
                 ? "Укажите дело, прикрепите файлы и отправьте"
-                : "Enter — отправить · Микрофон — говорите до стопа · 🔊 Озвучить — у ответа · «Разрешаю» — голосом или кнопкой"}
+                : "Enter — отправить · Микрофон — говорите, стоп — текст в поле · проверьте и отправьте · 🔊 у ответа"}
           </p>
         </div>
       </div>

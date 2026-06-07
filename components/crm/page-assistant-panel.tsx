@@ -175,36 +175,36 @@ export function PageAssistantPanel({ pageContext }: Props) {
     ]);
   }, [pendingAction]);
 
-  const onRecordingComplete = useCallback((text: string) => {
-    const t = text.trim();
-    if (!t) return;
+  const onRecordingComplete = useCallback((t: string) => {
+    const text = t.trim();
+    if (!text) return;
 
     if (pendingRef.current) {
-      if (isVoiceConfirm(t)) {
+      if (isVoiceConfirm(text)) {
         void handleConfirm();
         return;
       }
-      if (isVoiceDeny(t)) {
+      if (isVoiceDeny(text)) {
         handleDeny();
         return;
       }
     }
 
-    if (matchRegisterCaseVoice(t)) {
+    if (matchRegisterCaseVoice(text)) {
       router.push("/admin?preset=register_case");
       setOpen(false);
       return;
     }
 
-    const attachQ = parseAttachToCaseVoice(t, extractCaseHintFromPageContext(pageContext) ?? undefined);
+    const attachQ = parseAttachToCaseVoice(text, extractCaseHintFromPageContext(pageContext) ?? undefined);
     if (attachQ) {
       router.push(`/admin?preset=attach_documents&case=${encodeURIComponent(attachQ)}`);
       setOpen(false);
       return;
     }
 
-    void sendMessage(t);
-  }, [handleConfirm, handleDeny, sendMessage]);
+    setInput(text);
+  }, [handleConfirm, handleDeny, router, pageContext]);
 
   const {
     isListening,

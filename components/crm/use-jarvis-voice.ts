@@ -8,11 +8,16 @@ type SpeechResultList = {
   [index: number]: { isFinal: boolean; [index: number]: { transcript: string } };
 };
 
+type SpeechResultEvent = {
+  results: SpeechResultList;
+  resultIndex?: number;
+};
+
 type SpeechRecognitionInstance = {
   lang: string;
   continuous: boolean;
   interimResults: boolean;
-  onresult: ((e: { results: SpeechResultList }) => void) | null;
+  onresult: ((e: SpeechResultEvent) => void) | null;
   onerror: (() => void) | null;
   onend: (() => void) | null;
   onstart: (() => void) | null;
@@ -53,6 +58,8 @@ export function useJarvisVoice({
   const recognitionRef = useRef<SpeechRecognitionInstance | null>(null);
   const listeningRef = useRef(false);
   const finalBufferRef = useRef("");
+  const latestTranscriptRef = useRef("");
+  const finalizeOnceRef = useRef(false);
   const onCompleteRef = useRef(onRecordingComplete);
   const onTranscriptRef = useRef(onTranscript);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -68,13 +75,17 @@ export function useJarvisVoice({
   }, []);
 
   const finalizeRecording = useCallback(() => {
+    if (finalizeOnceRef.current) return;
+    finalizeOnceRef.current = true;
+
     clearTimer();
     listeningRef.current = false;
     setIsListening(false);
     setRecordingSeconds(0);
 
-    const full = finalBufferRef.current.trim();
+    const full = (latestTranscriptRef.current || finalBufferRef.current).trim();
     finalBufferRef.current = "";
+    latestTranscriptRef.current = "";
     setInterim("");
 
     if (full) {
@@ -84,6 +95,8 @@ export function useJarvisVoice({
         onTranscriptRef.current?.(full);
       }
     }
+
+    finalizeOnceRef.current = false;
   }, [clearTimer, mode]);
 
   const stopListening = useCallback(() => {
@@ -100,8 +113,10 @@ export function useJarvisVoice({
     }
 
     finalBufferRef.current = "";
+    latestTranscriptRef.current = "";
     setInterim("");
     setRecordingSeconds(0);
+    finalizeOnceRef.current = false;
 
     const recognition = new SR();
     recognition.lang = "ru-RU";
@@ -141,23 +156,28 @@ export function useJarvisVoice({
     };
 
     recognition.onresult = (event) => {
+      // Web Speech API отдаёт весь список results на каждый callback — нельзя append повторно.
+      let finalized = "";
       let interimText = "";
+      const start = typeof event.resultIndex === "number" ? event.resultIndex : 0;
+
       for (let i = 0; i < event.results.length; i++) {
         const chunk = event.results[i];
-        const transcript = chunk[0]?.transcript ?? "";
+        const transcript = (chunk[0]?.transcript ?? "").trim();
+        if (!transcript) continue;
         if (chunk.isFinal) {
-          const piece = transcript.trim();
-          if (piece) {
-            finalBufferRef.current = `${finalBufferRef.current} ${piece}`.trim();
-            if (mode === "instant") {
-              onTranscriptRef.current?.(piece);
-            }
+          finalized = finalized ? `${finalized} ${transcript}` : transcript;
+          if (mode === "instant" && i >= start) {
+            onTranscriptRef.current?.(transcript);
           }
         } else {
           interimText = transcript;
         }
       }
-      const preview = `${finalBufferRef.current} ${interimText}`.trim();
+
+      finalBufferRef.current = finalized;
+      const preview = interimText ? `${finalized} ${interimText}`.trim() : finalized;
+      latestTranscriptRef.current = preview;
       setInterim(preview);
     };
 
