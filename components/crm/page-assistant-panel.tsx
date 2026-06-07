@@ -8,8 +8,8 @@ import type { JarvisAction } from "@/lib/jarvis/types";
 import {
   useJarvisVoice,
   isVoiceConfirm,
-  speakJarvis,
 } from "@/components/crm/use-jarvis-voice";
+import { JarvisSpeakButton } from "@/components/crm/jarvis-speak-button";
 import { isVoiceDeny } from "@/lib/jarvis/types";
 import { matchRegisterCaseVoice, parseAttachToCaseVoice } from "@/lib/jarvis/voice-commands";
 import { extractCaseHintFromPageContext } from "@/lib/jarvis/case-resolve";
@@ -126,13 +126,6 @@ export function PageAssistantPanel({ pageContext }: Props) {
 
       setMessages(prev => [...prev, assistantMsg]);
 
-      if (data.reply && !data.needsConfirmation) {
-        speakJarvis(data.reply);
-      }
-      if (data.needsConfirmation && data.reply) {
-        speakJarvis(`${data.reply} Скажите «разрешаю» или «отмена».`);
-      }
-
       if (data.actions?.length) {
         for (const a of data.actions) {
           if (a.type === "navigate") {
@@ -198,7 +191,6 @@ export function PageAssistantPanel({ pageContext }: Props) {
     }
 
     if (matchRegisterCaseVoice(t)) {
-      speakJarvis("Открываю режим регистрации дела. Прикрепите PDF файлы.");
       router.push("/admin?preset=register_case");
       setOpen(false);
       return;
@@ -206,7 +198,6 @@ export function PageAssistantPanel({ pageContext }: Props) {
 
     const attachQ = parseAttachToCaseVoice(t, extractCaseHintFromPageContext(pageContext) ?? undefined);
     if (attachQ) {
-      speakJarvis(`Открываю прикрепление файлов к делу ${attachQ}.`);
       router.push(`/admin?preset=attach_documents&case=${encodeURIComponent(attachQ)}`);
       setOpen(false);
       return;
@@ -271,6 +262,10 @@ export function PageAssistantPanel({ pageContext }: Props) {
                   }`}>
                     {msg.content}
                   </div>
+
+                  {msg.role === "assistant" && !msg.isError && msg.content.trim() && (
+                    <JarvisSpeakButton text={msg.content} compact />
+                  )}
 
                   {msg.needsConfirmation && !msg.confirmed && !msg.denied &&
                    msg.pendingAction && pendingAction &&

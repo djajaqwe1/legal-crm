@@ -201,15 +201,54 @@ export function isVoiceDenyText(text: string): boolean {
   return isVoiceDeny(text);
 }
 
-/** Озвучить ответ Джарвиса (кратко) */
-export function speakJarvis(text: string, maxLen = 400) {
+/** Озвучить ответ по кнопке (не автоматически). */
+export function speakJarvis(text: string, maxLen = 800) {
   if (typeof window === "undefined" || !window.speechSynthesis) return;
-  const clean = text.replace(/\*\*/g, "").slice(0, maxLen);
+  primeVoices();
+  const clean = text.replace(/\*\*/g, "").replace(/^#+\s/gm, "").slice(0, maxLen);
   window.speechSynthesis.cancel();
   const utter = new SpeechSynthesisUtterance(clean);
   utter.lang = "ru-RU";
-  utter.rate = 1.05;
+  utter.rate = 0.98;
+  utter.pitch = 1;
+  const voice = pickRussianVoice();
+  if (voice) utter.voice = voice;
   window.speechSynthesis.speak(utter);
+}
+
+export function stopJarvisSpeech() {
+  if (typeof window === "undefined" || !window.speechSynthesis) return;
+  window.speechSynthesis.cancel();
+}
+
+export function isSpeechActive(): boolean {
+  if (typeof window === "undefined" || !window.speechSynthesis) return false;
+  return window.speechSynthesis.speaking;
+}
+
+function pickRussianVoice(): SpeechSynthesisVoice | null {
+  if (typeof window === "undefined" || !window.speechSynthesis) return null;
+  const voices = window.speechSynthesis.getVoices();
+  const ranked = [
+    (v: SpeechSynthesisVoice) => /Google.*Russian|Google\s+русский/i.test(v.name),
+    (v: SpeechSynthesisVoice) => /Microsoft.*Irina|Microsoft.*Pavel|Natural.*Russian/i.test(v.name),
+    (v: SpeechSynthesisVoice) => v.lang === "ru-RU" || v.lang.startsWith("ru"),
+  ];
+  for (const score of ranked) {
+    const hit = voices.find(score);
+    if (hit) return hit;
+  }
+  return null;
+}
+
+let voicesPrimed = false;
+function primeVoices() {
+  if (voicesPrimed || typeof window === "undefined" || !window.speechSynthesis) return;
+  window.speechSynthesis.getVoices();
+  window.speechSynthesis.onvoiceschanged = () => {
+    window.speechSynthesis.getVoices();
+  };
+  voicesPrimed = true;
 }
 
 // Back-compat for jarvis-chat

@@ -1,6 +1,7 @@
 /** Прямой маршрут частых запросов — работает даже при сбое Gemini. */
 import { formatLawyerDailyReply, type LawyerDailyBrief } from "@/lib/lawyer-daily";
 import { isOperationalRequest } from "./case-intake";
+import { JARVIS_CAPABILITIES_REPLY } from "./help";
 
 export type JarvisIntent = {
   toolName: string;
@@ -10,6 +11,12 @@ export type JarvisIntent = {
 export function matchJarvisIntent(text: string): JarvisIntent | null {
   const t = text.toLowerCase().trim();
   if (!t) return null;
+
+  if (
+    /что\s+(ты|вы)\s+(умеешь|можешь|делаешь)|чем\s+(ты|вы)\s+можешь|список\s+команд|как\s+пользоваться|^\s*помощь\s*$/.test(t)
+  ) {
+    return { toolName: "jarvis_help", args: {} };
+  }
 
   // Составные задачи (новое дело, претензия, дедлайн) — только через агента / intake workflow
   if (isOperationalRequest(text)) return null;
@@ -62,6 +69,10 @@ export function formatToolReply(
   data: unknown,
   message: string,
 ): string {
+  if (toolName === "jarvis_help") {
+    return JARVIS_CAPABILITIES_REPLY;
+  }
+
   if (toolName === "get_overdue_cases" && Array.isArray(data)) {
     const rows = data as Array<{ code: string; title: string; client?: string; deadline?: string }>;
     if (!rows.length) return "Просроченных дел нет — всё в срок.";
