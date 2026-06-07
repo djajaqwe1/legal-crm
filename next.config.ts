@@ -1,7 +1,13 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  serverExternalPackages: ["unpdf"],
+  serverExternalPackages: ["unpdf", "pdf-lib", "@pdf-lib/fontkit"],
+  outputFileTracingIncludes: {
+    "/api/documents/download-pdf": [
+      "./public/fonts/DejaVuSans.ttf",
+      "./node_modules/dejavu-fonts-ttf/ttf/DejaVuSans.ttf",
+    ],
+  },
   async headers() {
     return [
       {

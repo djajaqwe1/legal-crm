@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
-import PDFDocument from "pdfkit";
+import { PDFDocument } from "pdf-lib";
+import fontkit from "@pdf-lib/fontkit";
 import fs from "fs";
 import path from "path";
 
@@ -14,6 +15,45 @@ function safePdfFilename(title: string): string {
   return `${base}.pdf`;
 }
 
+function loadFontBytes(): Buffer {
+  const candidates = [
+    path.join(process.cwd(), "public", "fonts", "DejaVuSans.ttf"),
+    path.join(process.cwd(), "node_modules", "dejavu-fonts-ttf", "ttf", "DejaVuSans.ttf"),
+  ];
+  for (const fp of candidates) {
+    if (fs.existsSync(fp)) return fs.readFileSync(fp);
+  }
+  throw new Error("Font DejaVuSans.ttf not found");
+}
+
+function wrapLines(
+  text: string,
+  font: { widthOfTextAtSize: (t: string, size: number) => number },
+  size: number,
+  maxWidth: number,
+): string[] {
+  const out: string[] = [];
+  for (const paragraph of text.split(/\r?\n/)) {
+    if (!paragraph.trim()) {
+      out.push("");
+      continue;
+    }
+    const words = paragraph.split(/\s+/);
+    let line = "";
+    for (const word of words) {
+      const test = line ? `${line} ${word}` : word;
+      if (font.widthOfTextAtSize(test, size) <= maxWidth) {
+        line = test;
+      } else {
+        if (line) out.push(line);
+        line = word;
+      }
+    }
+    if (line) out.push(line);
+  }
+  return out;
+}
+
 export async function POST(request: Request) {
   try {
     const { text, title } = (await request.json()) as { text?: string; title?: string };
@@ -22,50 +62,46 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "No text provided" }, { status: 400 });
     }
 
-    const fontPath = path.join(process.cwd(), "public", "fonts", "DejaVuSans.ttf");
-    const fontCandidates = [
-      fontPath,
-      path.join(process.cwd(), "node_modules", "dejavu-fonts-ttf", "ttf", "DejaVuSans.ttf"),
-      "C:\\Windows\\Fonts\\arial.ttf",
-      "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
-      "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
-    ];
+    const pdfDoc = await PDFDocument.create();
+    pdfDoc.registerFontkit(fontkit);
+    const font = await pdfDoc.embedFont(loadFontBytes());
 
-    let resolvedFont: string | null = null;
-    for (const fp of fontCandidates) {
-      if (fs.existsSync(fp)) {
-        resolvedFont = fp;
-        break;
+    const pageWidth = 595;
+    const pageHeight = 842;
+    const margin = 50;
+    const contentWidth = pageWidth - margin * 2;
+    const bodySize = 12;
+    const titleSize = 16;
+    const lineHeight = 16;
+
+    let page = pdfDoc.addPage([pageWidth, pageHeight]);
+    let y = pageHeight - margin;
+
+    const titleText = title || "Документ";
+    page.drawText(titleText, { x: margin, y: y - titleSize, size: titleSize, font });
+    y -= titleSize + 24;
+
+    const lines = wrapLines(text, font, bodySize, contentWidth);
+    for (const line of lines) {
+      if (y < margin + lineHeight) {
+        page = pdfDoc.addPage([pageWidth, pageHeight]);
+        y = pageHeight - margin;
       }
+      if (line) {
+        page.drawText(line, { x: margin, y: y - bodySize, size: bodySize, font });
+      }
+      y -= lineHeight;
     }
 
-    const chunks: Buffer[] = [];
-    const doc = new PDFDocument({ margin: 50 });
-
-    const pdfBuffer = await new Promise<Buffer>((resolve, reject) => {
-      doc.on("data", (chunk: Buffer) => chunks.push(chunk));
-      doc.on("end", () => resolve(Buffer.concat(chunks)));
-      doc.on("error", reject);
-
-      try {
-        if (resolvedFont) doc.font(resolvedFont);
-        doc.fontSize(16).text(title || "Документ", { align: "center" });
-        doc.moveDown();
-        doc.fontSize(12).text(text, { align: "left", lineGap: 2 });
-        doc.end();
-      } catch (err) {
-        reject(err);
-      }
-    });
-
+    const pdfBytes = await pdfDoc.save();
     const filename = safePdfFilename(title ?? "document");
     const encoded = encodeURIComponent(filename);
 
-    return new NextResponse(new Uint8Array(pdfBuffer), {
+    return new NextResponse(new Uint8Array(pdfBytes), {
       headers: {
         "Content-Type": "application/pdf",
         "Content-Disposition": `attachment; filename="${encoded}"; filename*=UTF-8''${encoded}`,
-        "Content-Length": String(pdfBuffer.length),
+        "Content-Length": String(pdfBytes.length),
       },
     });
   } catch (error: unknown) {
