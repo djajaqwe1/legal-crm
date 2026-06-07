@@ -25,6 +25,7 @@ import {
 } from "@/lib/jarvis/sessions";
 
 export const dynamic = "force-dynamic";
+export const maxDuration = 120;
 
 const rateLimitMap = new Map<string, { count: number; resetAt: number }>();
 

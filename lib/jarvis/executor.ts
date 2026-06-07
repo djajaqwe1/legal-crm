@@ -12,6 +12,7 @@ import { generateTextFallback } from "@/lib/llm/router";
 import { addDocument } from "@/lib/crm-repository";
 import { FORBIDDEN_TOOLS, TOOL_LABELS } from "./types";
 import type { JarvisAction, JarvisToolResult } from "./types";
+import { buildFallbackDocument } from "./document-fallback";
 
 const GEMINI_KEY = process.env.GEMINI_API_KEY ?? "";
 
@@ -575,7 +576,12 @@ export async function executeJarvisTool(
 
     const caseId = (createResult.data as { id: string }).id;
     const caseCode = (createResult.data as { code?: string }).code;
-    if (createResult.actions) actions.push(...createResult.actions);
+    const caseTitle = (createResult.data as { title?: string }).title;
+    if (createResult.actions) {
+      for (const a of createResult.actions) {
+        if (a.type === "refresh") actions.push(a);
+      }
+    }
 
     let checklistMsg = "";
     if (workflowId) {
@@ -586,48 +592,79 @@ export async function executeJarvisTool(
           : " Чеклист уже был применён.";
     }
 
-    let documentData: unknown = null;
+    let documentData: {
+      type: string;
+      text: string;
+      isFallback?: boolean;
+      legalSources?: Array<{ title: string; url: string }>;
+    } | null = null;
+    let documentError: string | undefined;
     let documentMsg = "";
+
     if (documentType) {
       const docResult = await executeJarvisTool(workspaceId, "generate_document", {
         type: documentType,
-        description,
+        description: `${title}\n\n${description}`,
         clientName,
       });
-      if (docResult.success) {
-        documentData = docResult.data;
-        const docText = (docResult.data as { text?: string })?.text;
-        if (docText && caseId) {
-          try {
-            await addDocument(caseId, `${documentType}-${caseCode ?? caseId}.txt`, "#jarvis-generated", {
-              category: "correspondence",
-              storageProvider: "crm",
-              mimeType: "text/plain",
-              sizeBytes: Buffer.byteLength(docText, "utf8"),
-              extractedText: docText,
-            });
-            documentMsg = ` Черновик «${documentType}» готов и сохранён в дело.`;
-          } catch {
-            documentMsg = ` Черновик «${documentType}» готов (сохранение в дело не удалось).`;
-          }
-        } else {
-          documentMsg = ` Черновик «${documentType}» готов.`;
-        }
-      } else {
-        documentMsg = ` Не удалось сгенерировать документ: ${docResult.message}`;
+
+      let docText = docResult.success
+        ? (docResult.data as { text?: string })?.text?.trim()
+        : undefined;
+      let isFallback = false;
+
+      if (!docText) {
+        docText = buildFallbackDocument(documentType, clientName, description, title);
+        isFallback = true;
+        documentError = docResult.success
+          ? "AI не вернул текст — показан структурный черновик."
+          : docResult.message;
+      }
+
+      const legalSources = docResult.success
+        ? (docResult.data as { legalSources?: Array<{ title: string; url: string }> })?.legalSources
+        : undefined;
+
+      documentData = {
+        type: documentType,
+        text: docText,
+        isFallback,
+        legalSources,
+      };
+
+      try {
+        await addDocument(caseId, `${documentType}-${caseCode ?? caseId}.txt`, "#jarvis-generated", {
+          category: "correspondence",
+          storageProvider: "crm",
+          mimeType: "text/plain",
+          sizeBytes: Buffer.byteLength(docText, "utf8"),
+          extractedText: docText,
+        });
+        documentMsg = isFallback
+          ? ` Структурный черновик «${documentType}» сохранён в дело (AI недоступен).`
+          : ` Черновик «${documentType}» готов и сохранён в дело.`;
+      } catch {
+        documentMsg = ` Черновик «${documentType}» готов (сохранение в карточку не удалось — скачайте PDF ниже).`;
       }
     }
 
     const grounding = adiletQuery ? await searchLegalGrounding(adiletQuery, 4) : null;
 
+    actions.push({
+      type: "navigate",
+      path: `/admin/cases/${caseId}`,
+      label: caseCode ?? "Открыть дело",
+    });
+
     return {
       success: true,
       data: {
-        case: createResult.data,
+        case: { ...createResult.data as object, id: caseId, code: caseCode, title: caseTitle },
         document: documentData,
-        legalSources: grounding?.sources ?? [],
+        documentError,
+        legalSources: grounding?.sources ?? documentData?.legalSources ?? [],
       },
-      message: `Готово: дело ${caseCode ?? caseId} для «${clientName}».${checklistMsg}${documentMsg}`,
+      message: `Готово: дело ${caseCode ?? caseId} для «${clientName}».${checklistMsg}${documentMsg}${documentData ? " Черновик — ниже, кнопки PDF и Word." : ""}`,
       actions,
     };
   }
@@ -733,7 +770,7 @@ ${grounding.contextBlock || "Предупреждение: нормы из Әд�
             const model = genAI.getGenerativeModel({ model: modelName });
             const result = await Promise.race([
               model.generateContent(docPrompt),
-              new Promise<never>((_, reject) => setTimeout(() => reject(new Error("timeout")), 25000)),
+              new Promise<never>((_, reject) => setTimeout(() => reject(new Error("timeout")), 55000)),
             ]);
             docText = (result as Awaited<ReturnType<typeof model.generateContent>>).response.text();
             if (docText) break;
