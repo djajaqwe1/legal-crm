@@ -55,6 +55,33 @@ function matchMorningBrief(text: string): VoiceCommand | null {
   return null;
 }
 
+/** «что ты умеешь» / «помощь» — не путать с поиском дела */
+function matchHelpCommand(text: string): VoiceCommand | null {
+  const t = text.toLowerCase().trim();
+  if (
+    /что\s+(ты|вы)\s+(умеешь|можешь|делаешь)|чем\s+(ты|вы)\s+можешь|список\s+команд|как\s+пользоваться|как\s+работает\s+(джarvis|jarvis|ассистент)|^\s*помощь\s*$|^\s*help\s*$/.test(t) ||
+    /зачем\s+(ты|вы)\s+озвучива|не\s+озвучива|перестань\s+говорить|хватит\s+озвучивать/.test(t)
+  ) {
+    return {
+      toolName: "jarvis_help",
+      args: {},
+      confirmReply: "",
+      instant: true,
+    };
+  }
+  return null;
+}
+
+function isLikelyCaseQuery(q: string): boolean {
+  const t = q.trim();
+  if (!t || t.length > 80) return false;
+  if (/^LC-\d{4}-\d+/i.test(t)) return true;
+  if (/^(ты|вы|умеешь|можешь|зачем|почему|как\s+работ|ozvuch|озвуч)/i.test(t)) return false;
+  if (/\?/.test(t) && t.split(/\s+/).length > 5) return false;
+  if (/озвучива|умеешь|можешь|команды|help|помощь/i.test(t)) return false;
+  return true;
+}
+
 /** «что по делу иванова» / «кратко по LC-2026-001» / «кратко» на экране дела */
 function matchCaseBrief(text: string, opts?: VoiceMatchOptions): VoiceCommand | null {
   if (/^(кратко|сводка|статус)$/i.test(text.trim()) && opts?.defaultCaseQuery) {
@@ -65,12 +92,21 @@ function matchCaseBrief(text: string, opts?: VoiceMatchOptions): VoiceCommand | 
       instant: true,
     };
   }
-  const m = text.match(
-    /(?:что|расскажи|кратко|сводка|статус)\s+(?:по\s+)?(?:делу\s+)?(.+)/i,
-  );
+
+  const byCode = text.match(/(?:что|расскажи|кратко|сводка|статус)\s+(?:по\s+)?(LC-\d{4}-\d+)/i);
+  if (byCode) {
+    return {
+      toolName: "case_brief",
+      args: { caseQuery: byCode[1].trim() },
+      confirmReply: "",
+      instant: true,
+    };
+  }
+
+  const m = text.match(/(?:что|расскажи|кратко|сводка|статус)\s+по\s+делу\s+(.+)/i);
   if (!m) return null;
   const q = m[1].trim().replace(/\.$/, "");
-  if (/^(CRM|сегодня|мне|на\s+сегодня)/i.test(q)) return null;
+  if (!isLikelyCaseQuery(q)) return null;
   return {
     toolName: "case_brief",
     args: withDefaultCase({ caseQuery: q }, opts?.defaultCaseQuery),
@@ -415,6 +451,7 @@ export function matchVoiceCommand(text: string, options?: VoiceMatchOptions): Vo
   if (!raw || raw.length < 4) return null;
 
   return (
+    matchHelpCommand(raw) ??
     matchMorningBrief(raw) ??
     matchOverdueAlert(raw) ??
     matchSearchAdilet(raw) ??

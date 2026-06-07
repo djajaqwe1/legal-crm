@@ -34,6 +34,7 @@ export const READ_ONLY_TOOLS = new Set([
   "list_case_tasks",
   "search_adilet",
   "navigate_to",
+  "jarvis_help",
 ]);
 
 /** Опасные операции — не реализованы и заблокированы на уровне executor */

@@ -16,6 +16,7 @@ import {
   resolveCaseQuery,
 } from "@/lib/jarvis/case-resolve";
 import { searchLegalGrounding } from "@/lib/legal-grounding/adilet-search";
+import { JARVIS_CAPABILITIES_REPLY } from "@/lib/jarvis/help";
 import { isVoiceConfirm, isVoiceDeny, READ_ONLY_TOOLS } from "@/lib/jarvis/types";
 import {
   appendJarvisMessages,
@@ -67,6 +68,15 @@ async function runInstantVoiceTool(
   toolName: string,
   args: Record<string, unknown>,
 ) {
+  if (toolName === "jarvis_help") {
+    return {
+      reply: JARVIS_CAPABILITIES_REPLY,
+      toolUsed: "jarvis_help",
+      toolResult: null,
+      actions: [],
+    };
+  }
+
   if (toolName === "morning_brief") {
     const [daily, overdue] = await Promise.all([
       executeJarvisTool(workspaceId, "get_lawyer_daily", {}),

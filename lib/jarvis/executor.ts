@@ -13,6 +13,7 @@ import { addDocument } from "@/lib/crm-repository";
 import { FORBIDDEN_TOOLS, TOOL_LABELS } from "./types";
 import type { JarvisAction, JarvisToolResult } from "./types";
 import { buildFallbackDocument } from "./document-fallback";
+import { JARVIS_CAPABILITIES_REPLY } from "./help";
 
 const GEMINI_KEY = process.env.GEMINI_API_KEY ?? "";
 
@@ -252,6 +253,10 @@ export async function executeJarvisTool(
       data: { path: action.type === "navigate" ? action.path : "" },
       actions: [action],
     };
+  }
+
+  if (toolName === "jarvis_help") {
+    return { success: true, data: null, message: JARVIS_CAPABILITIES_REPLY };
   }
 
   if (toolName === "get_stats") {

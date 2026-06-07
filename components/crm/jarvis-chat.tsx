@@ -6,7 +6,8 @@ import { Send, Mic, MicOff, Loader2, CheckCircle, XCircle, Paperclip, X, Chevron
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { JarvisIntakeResultCard, JarvisResultCard } from "@/components/crm/jarvis-result-card";
-import { useJarvisVoice, isVoiceConfirm, speakJarvis } from "@/components/crm/use-jarvis-voice";
+import { useJarvisVoice, isVoiceConfirm } from "@/components/crm/use-jarvis-voice";
+import { JarvisSpeakButton } from "@/components/crm/jarvis-speak-button";
 import { isVoiceDeny } from "@/lib/jarvis/types";
 import { JARVIS_PRESETS, getPreset, PRESET_FAST_COMMAND, type JarvisPresetId } from "@/lib/jarvis/presets";
 import { VOICE_COMMAND_EXAMPLES, matchRegisterCaseVoice, parseAttachToCaseVoice } from "@/lib/jarvis/voice-commands";
@@ -373,7 +374,6 @@ export function JarvisChat({
       }
 
       applyActions(data.actions);
-      speakJarvis(data.reply ?? "Файлы прикреплены");
       setMessages(prev => [...prev, {
         id: `a-${Date.now()}`,
         role: "assistant",
@@ -458,11 +458,6 @@ export function JarvisChat({
         return;
       }
 
-      if (data.reply && !data.needsConfirmation) speakJarvis(data.reply);
-      if (data.needsConfirmation && data.reply) {
-        speakJarvis(`${data.reply} Скажите разрешаю или отмена.`);
-      }
-
       applyActions(data.actions, data.toolUsed);
 
       setMessages(prev => [...prev, {
@@ -512,7 +507,6 @@ export function JarvisChat({
       if (matchRegisterCaseVoice(text)) {
         setPresetId("register_case");
         setFiles([]);
-        speakJarvis("Режим регистрации дела. Прикрепите PDF или текстовые файлы и нажмите отправить.");
         setMessages(prev => [...prev, {
           id: `h-${Date.now()}`,
           role: "assistant",
@@ -526,7 +520,6 @@ export function JarvisChat({
         setPresetId("attach_documents");
         setAttachCaseQuery(attachQ);
         setFiles([]);
-        speakJarvis(`Режим прикрепления к делу ${attachQ}. Выберите файлы и нажмите отправить.`);
         setMessages(prev => [...prev, {
           id: `h-${Date.now()}`,
           role: "assistant",
@@ -655,6 +648,10 @@ export function JarvisChat({
                 >
                   <span className="whitespace-pre-wrap">{msg.content}</span>
                 </div>
+
+                {msg.role === "assistant" && !msg.isError && msg.content.trim() && (
+                  <JarvisSpeakButton text={msg.content} />
+                )}
 
                 {msg.toolResult && msg.toolUsed && (
                   <ResultCard toolName={msg.toolUsed} data={msg.toolResult} />
@@ -819,7 +816,7 @@ export function JarvisChat({
               ? "Прикрепите материалы и отправьте — создам новое дело"
               : presetId === "attach_documents"
                 ? "Укажите дело, прикрепите файлы и отправьте"
-                : "Enter — отправить · Микрофон — говорите до стопа · «Разрешаю» — голосом или кнопкой"}
+                : "Enter — отправить · Микрофон — говорите до стопа · 🔊 Озвучить — у ответа · «Разрешаю» — голосом или кнопкой"}
           </p>
         </div>
       </div>
