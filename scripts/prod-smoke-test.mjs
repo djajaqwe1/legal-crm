@@ -149,6 +149,45 @@ async function main() {
     simpleCaseData.pendingAction?.toolName ?? "?",
   );
 
+  // Security & routing
+  const noAuthJarvis = await fetch(`${BASE}/api/ai/jarvis`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ messages: [{ role: "user", content: "статистика" }] }),
+  });
+  ok("Jarvis без сессии → 401", noAuthJarvis.status === 401, String(noAuthJarvis.status));
+
+  const helpRes = await fetch(`${BASE}/api/ai/jarvis`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Cookie: cookieHeader() },
+    body: JSON.stringify({ messages: [{ role: "user", content: "что ты умеешь?" }] }),
+  });
+  const helpData = await helpRes.json();
+  ok("Jarvis help routing", helpRes.ok && helpData.toolUsed === "jarvis_help", helpData.toolUsed ?? helpData.error);
+  ok("Jarvis help text", /Мой рабочий день|Разрешаю/i.test(helpData.reply ?? ""), (helpData.reply ?? "").slice(0, 40));
+
+  const dumbRes = await fetch(`${BASE}/api/ai/jarvis`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Cookie: cookieHeader() },
+    body: JSON.stringify({
+      messages: [{ role: "user", content: "что ты вообще умеешь делать и зачем ты озвучиваешь ответы" }],
+    }),
+  });
+  const dumbData = await dumbRes.json();
+  ok(
+    "Jarvis не ищет дело на «что ты умеешь»",
+    dumbData.toolUsed === "jarvis_help" || !/не найдено/i.test(dumbData.reply ?? ""),
+    dumbData.toolUsed ?? dumbData.reply?.slice(0, 50),
+  );
+
+  const pdfRes = await fetch(`${BASE}/api/documents/download-pdf`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Cookie: cookieHeader() },
+    body: JSON.stringify({ title: "test-pret", text: "Претензия тест\n\nТекст документа." }),
+  });
+  ok("PDF export HTTP", pdfRes.ok, String(pdfRes.status));
+  ok("PDF content-type", pdfRes.headers.get("content-type")?.includes("pdf") ?? false, pdfRes.headers.get("content-type") ?? "?");
+
   const failed = tests.filter((t) => !t.pass);
   console.log(`\n${tests.length - failed.length}/${tests.length} passed`);
   if (failed.length) {

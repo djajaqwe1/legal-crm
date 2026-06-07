@@ -13,7 +13,7 @@ export function matchJarvisIntent(text: string): JarvisIntent | null {
   if (!t) return null;
 
   if (
-    /что\s+(ты|вы)\s+(умеешь|можешь|делаешь)|чем\s+(ты|вы)\s+можешь|список\s+команд|как\s+пользоваться|^\s*помощь\s*$/.test(t)
+    /что\s+(?:ты|вы)(?:\s+[^\s?.!,]+){0,8}\s*(умеешь|можешь|делаешь)|чем\s+(?:ты|вы)\s+можешь|список\s+команд|как\s+пользоваться|^\s*помощь\s*$/.test(t)
   ) {
     return { toolName: "jarvis_help", args: {} };
   }

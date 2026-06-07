@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { generateWithFallback } from "@/lib/ai-service";
 import { createLead } from "@/lib/crm-repository";
+import { checkRateLimit, clientIp } from "@/lib/rate-limit";
 
 const SALES_SYSTEM_PROMPT = `
 Ты — профессиональный ИИ-менеджер по продажам для известного юриста Рустема Айкимбаева (ТОО «Конгломерат Алтай»).
@@ -16,6 +17,12 @@ const SALES_SYSTEM_PROMPT = `
 `;
 
 export async function POST(req: Request) {
+  const ip = clientIp(req);
+  const limit = checkRateLimit(`public-consult:${ip}`, 30, 60 * 60_000);
+  if (!limit.allowed) {
+    return NextResponse.json({ error: "Слишком много запросов. Попробуйте позже." }, { status: 429 });
+  }
+
   try {
     const { message, history } = await req.json();
 

@@ -1,7 +1,14 @@
 import { NextResponse } from "next/server";
 import { createLead } from "@/lib/crm-repository";
+import { checkRateLimit, clientIp } from "@/lib/rate-limit";
 
 export async function POST(req: Request) {
+  const ip = clientIp(req);
+  const limit = checkRateLimit(`public-lead:${ip}`, 20, 60 * 60_000);
+  if (!limit.allowed) {
+    return NextResponse.json({ ok: false, error: "Слишком много заявок. Попробуйте позже." }, { status: 429 });
+  }
+
   try {
     const { name, phone } = (await req.json()) as { name?: string; phone?: string };
 

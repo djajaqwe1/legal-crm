@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { DEFAULT_WORKSPACE_SLUG, ACTIVE_WORKSPACE_COOKIE } from "@/lib/workspace-scope";
+import { checkRateLimit, clientIp } from "@/lib/rate-limit";
 
 const SESSION_COOKIE = "admin_session";
 const SESSION_VALUE = "authorized";
@@ -15,6 +16,15 @@ function expectedPassword(): string | null {
 }
 
 export async function POST(request: Request) {
+  const ip = clientIp(request);
+  const limit = checkRateLimit(`login:${ip}`, 12, 15 * 60_000);
+  if (!limit.allowed) {
+    return NextResponse.json(
+      { ok: false, error: `Слишком много попыток. Подождите ${limit.retryAfterSec ?? 60} сек.` },
+      { status: 429 },
+    );
+  }
+
   const expected = expectedPassword();
   if (!expected) {
     return NextResponse.json(

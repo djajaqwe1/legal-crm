@@ -59,8 +59,9 @@ function matchMorningBrief(text: string): VoiceCommand | null {
 function matchHelpCommand(text: string): VoiceCommand | null {
   const t = text.toLowerCase().trim();
   if (
-    /что\s+(ты|вы)\s+(умеешь|можешь|делаешь)|чем\s+(ты|вы)\s+можешь|список\s+команд|как\s+пользоваться|как\s+работает\s+(джarvis|jarvis|ассистент)|^\s*помощь\s*$|^\s*help\s*$/.test(t) ||
-    /зачем\s+(ты|вы)\s+озвучива|не\s+озвучива|перестань\s+говорить|хватит\s+озвучивать/.test(t)
+    /что\s+(?:ты|вы)(?:\s+[^\s?.!,]+){0,8}\s*(умеешь|можешь|делаешь)/.test(t) ||
+    /чем\s+(?:ты|вы)\s+можешь|список\s+команд|как\s+пользоваться|как\s+работает\s+(?:джarvis|jarvis|ассистент)|^\s*помощь\s*$|^\s*help\s*$/.test(t) ||
+    /зачем\s+(?:ты|вы)\s+озвучива|не\s+озвучива|перестань\s+говорить|хватит\s+озвучивать/.test(t)
   ) {
     return {
       toolName: "jarvis_help",
