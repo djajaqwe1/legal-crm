@@ -36,6 +36,7 @@ type Props = {
   sessionId: string;
   initialPreset?: JarvisPresetId;
   initialCaseQuery?: string;
+  autoRunPreset?: boolean;
   pageContext?: string;
   onSessionActivity?: () => void;
   onSessionTitle?: (title: string) => void;
@@ -203,6 +204,7 @@ export function JarvisChat({
   sessionId,
   initialPreset,
   initialCaseQuery,
+  autoRunPreset,
   pageContext,
   onSessionActivity,
   onSessionTitle,
@@ -227,6 +229,7 @@ export function JarvisChat({
   const sendRef = useRef<(text: string, confirmed?: boolean, action?: Message["pendingAction"]) => Promise<void>>(
     async () => {},
   );
+  const autoRanRef = useRef(false);
 
   const preset = getPreset(presetId);
 
@@ -283,6 +286,19 @@ export function JarvisChat({
     if (initialPreset) setPresetId(initialPreset);
     if (initialCaseQuery) setAttachCaseQuery(initialCaseQuery);
   }, [initialPreset, initialCaseQuery]);
+
+  useEffect(() => {
+    autoRanRef.current = false;
+  }, [sessionId]);
+
+  useEffect(() => {
+    if (!autoRunPreset || autoRanRef.current || loadingHistory || isLoading) return;
+    const preset = initialPreset ?? "chat";
+    const quick = PRESET_FAST_COMMAND[preset];
+    if (!quick) return;
+    autoRanRef.current = true;
+    void sendRef.current(quick);
+  }, [autoRunPreset, initialPreset, loadingHistory, isLoading]);
 
   const applyActions = useCallback((actions?: JarvisAction[], toolUsed?: string) => {
     if (!actions?.length) return;

@@ -15,6 +15,7 @@ import type { JarvisAction, JarvisToolResult } from "./types";
 import { buildFallbackDocument } from "./document-fallback";
 import { JARVIS_CAPABILITIES_REPLY } from "./help";
 import { guardOfflineTool } from "./offline-tools";
+import { formatCaseDisambiguation, resolveCaseQuery } from "./case-resolve";
 
 const GEMINI_KEY = process.env.GEMINI_API_KEY ?? "";
 
@@ -34,23 +35,6 @@ function resolveNavigatePath(page: string, id?: string, query?: string): JarvisA
   return path ? { type: "navigate", path, label: page } : null;
 }
 
-async function findCaseByQuery(workspaceId: string, query: string) {
-  const q = query.trim();
-  if (!q) return null;
-  return prisma.legalCase.findFirst({
-    where: {
-      workspaceId,
-      OR: [
-        { code: { contains: q, mode: "insensitive" } },
-        { title: { contains: q, mode: "insensitive" } },
-        { client: { name: { contains: q, mode: "insensitive" } } },
-      ],
-    },
-    include: { client: true },
-    orderBy: { updatedAt: "desc" },
-  });
-}
-
 async function resolveCaseId(
   workspaceId: string,
   args: Record<string, unknown>,
@@ -65,9 +49,22 @@ async function resolveCaseId(
   }
   const q = typeof args.caseQuery === "string" ? args.caseQuery : "";
   if (!q.trim()) return { error: "Укажите дело" };
-  const found = await findCaseByQuery(workspaceId, q);
-  if (!found) return { error: `Дело «${q}» не найдено` };
-  return { caseId: found.id, caseCode: found.code };
+
+  const resolved = await resolveCaseQuery(workspaceId, q);
+  if (resolved.type === "not_found") return { error: `Дело «${q}» не найдено` };
+  if (resolved.type === "ambiguous") return { error: formatCaseDisambiguation(resolved.cases) };
+  return { caseId: resolved.case.id, caseCode: resolved.case.code };
+}
+
+function buildDocumentContextFromCase(
+  documents: Array<{ name: string; extractedText: string | null }>,
+  maxChars = 10_000,
+): string {
+  const blocks = documents
+    .filter(d => d.extractedText?.trim())
+    .slice(0, 5)
+    .map(d => `--- ${d.name} ---\n${d.extractedText!.trim().slice(0, 2500)}`);
+  return blocks.join("\n\n").slice(0, maxChars);
 }
 
 export async function executeJarvisTool(
@@ -337,16 +334,27 @@ export async function executeJarvisTool(
 
   if (toolName === "find_case") {
     const { query } = args as { query: string };
-    const found = await findCaseByQuery(workspaceId, query);
-    if (!found) return { success: true, data: null, message: `Дело по запросу «${query}» не найдено` };
+    const resolved = await resolveCaseQuery(workspaceId, query);
+    if (resolved.type === "not_found") {
+      return { success: true, data: null, message: `Дело по запросу «${query}» не найдено` };
+    }
+    if (resolved.type === "ambiguous") {
+      return { success: false, message: formatCaseDisambiguation(resolved.cases) };
+    }
+    const c = resolved.case;
+    const full = await prisma.legalCase.findFirst({
+      where: { id: c.id, workspaceId },
+      include: { client: true },
+    });
+    if (!full) return { success: true, data: null, message: "Дело не найдено" };
     const data = {
-      id: found.id,
-      code: found.code,
-      title: found.title,
-      status: caseStatusToRu[found.status as CaseStatus] ?? found.status,
-      client: found.client?.name ?? "—",
+      id: full.id,
+      code: full.code,
+      title: full.title,
+      status: caseStatusToRu[full.status as CaseStatus] ?? full.status,
+      client: full.client?.name ?? "—",
     };
-    return { success: true, data, message: `Найдено: ${found.code} — ${found.title}` };
+    return { success: true, data, message: `Найдено: ${full.code} — ${full.title}` };
   }
 
   if (toolName === "get_clients") {
@@ -691,13 +699,19 @@ export async function executeJarvisTool(
 
     const legalCase = await prisma.legalCase.findFirst({
       where: { id: caseId, workspaceId },
-      include: { client: true, tasks: { where: { completed: false }, take: 5 } },
+      include: {
+        client: true,
+        tasks: { where: { completed: false }, take: 5 },
+        documents: { orderBy: { createdAt: "desc" }, take: 8 },
+      },
     });
     if (!legalCase) return { success: false, message: "Дело не найдено" };
 
+    const materials = buildDocumentContextFromCase(legalCase.documents);
     const context = [
       legalCase.description,
       legalCase.title,
+      materials ? `Материалы дела:\n${materials}` : null,
       extraNotes,
       legalCase.tasks.length
         ? `Открытые задачи: ${legalCase.tasks.map(t => t.title).join("; ")}`

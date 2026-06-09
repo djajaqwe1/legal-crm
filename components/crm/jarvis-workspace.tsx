@@ -24,6 +24,7 @@ export function JarvisWorkspace() {
   const searchParams = useSearchParams();
   const initialPreset = (searchParams.get("preset") as JarvisPresetId | null) ?? undefined;
   const initialCaseQuery = searchParams.get("case") ?? undefined;
+  const autoRunPreset = searchParams.get("run") === "1";
   const [navOpen, setNavOpen] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(true);
   const [sessionId, setSessionId] = useState<string | null>(null);
@@ -209,6 +210,7 @@ export function JarvisWorkspace() {
           sessionId={sessionId}
           initialPreset={initialPreset}
           initialCaseQuery={initialCaseQuery}
+          autoRunPreset={autoRunPreset}
           onSessionActivity={() => void refreshSessions()}
           onSessionTitle={(title) => handleSessionRenamed(sessionId, title)}
         />

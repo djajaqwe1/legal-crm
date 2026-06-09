@@ -119,10 +119,15 @@ export function formatToolReply(
     const taskLines = openTasks.length
       ? openTasks.map(t => `• ${t.title}${t.dueDate ? ` (${t.dueDate})` : ""}`).join("\n")
       : "• Все задачи выполнены";
+    const docLines = d.documents.length
+      ? d.documents.map(doc => `• ${doc.name}`).join("\n")
+      : "• Нет прикреплённых файлов";
     return [
       `Дело ${d.code} — «${d.title}»`,
       `Клиент: ${d.client} · Статус: ${d.status}${d.deadline ? ` · Дедлайн: ${d.deadline}` : ""}`,
-      `Документов: ${d.documents.length}`,
+      "",
+      `Документы (${d.documents.length}):`,
+      docLines,
       "",
       `Открытые задачи (${openTasks.length}):`,
       taskLines,

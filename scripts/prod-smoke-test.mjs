@@ -173,6 +173,35 @@ async function main() {
     dlData.pendingAction?.toolName ?? (dlData.reply ?? "").slice(0, 50),
   );
 
+  const briefRes = await fetch(`${BASE}/api/ai/jarvis`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Cookie: cookieHeader() },
+    body: JSON.stringify({
+      messages: [{ role: "user", content: "что по делу иванова" }],
+    }),
+  });
+  const briefData = await briefRes.json();
+  ok(
+    "Jarvis case brief C4",
+    briefRes.ok &&
+      (briefData.toolUsed === "get_case_context" ||
+        briefData.toolUsed === "find_case" ||
+        /не найдено|несколько/i.test(briefData.reply ?? "")),
+    briefData.toolUsed ?? (briefData.reply ?? "").slice(0, 50),
+  );
+
+  const docxRes = await fetch(`${BASE}/api/documents/download-docx`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Cookie: cookieHeader() },
+    body: JSON.stringify({ title: "test-doc", text: "Тестовый документ CRM" }),
+  });
+  ok("DOCX export HTTP", docxRes.ok, String(docxRes.status));
+  ok(
+    "DOCX content-type",
+    docxRes.headers.get("content-type")?.includes("msword") ?? false,
+    docxRes.headers.get("content-type") ?? "?",
+  );
+
   // Security & routing
   const noAuthJarvis = await fetch(`${BASE}/api/ai/jarvis`, {
     method: "POST",

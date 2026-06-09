@@ -404,6 +404,15 @@ function matchNavigatePages(text: string): VoiceCommand | null {
   if (/^(?:открой|покажи)\s+(?:клиентов|контрагентов)$/.test(t)) {
     return { toolName: "navigate_to", args: { page: "clients" }, confirmReply: "", instant: true };
   }
+  if (/^(?:открой|покажи)\s+(?:договор|договоры|реестр\s+договор)/.test(t)) {
+    return { toolName: "navigate_to", args: { page: "contracts" }, confirmReply: "", instant: true };
+  }
+  if (/^(?:конструктор|генератор)\s+документ|документ[- ]?builder/.test(t)) {
+    return { toolName: "navigate_to", args: { page: "documents-builder" }, confirmReply: "", instant: true };
+  }
+  if (/^(?:открой|покажи)\s+(?:джарвис|jarvis|ассистент)/.test(t)) {
+    return { toolName: "navigate_to", args: { page: "jarvis" }, confirmReply: "", instant: true };
+  }
   return null;
 }
 
