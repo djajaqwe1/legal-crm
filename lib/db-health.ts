@@ -27,7 +27,10 @@ export async function isDatabaseReachable(): Promise<boolean> {
 
   probeInFlight = (async () => {
     try {
-      await prisma.$queryRaw`SELECT 1`;
+      await Promise.race([
+        prisma.$queryRaw`SELECT 1`,
+        new Promise<never>((_, reject) => setTimeout(() => reject(new Error("db probe timeout")), 8000)),
+      ]);
       lastOk = true;
       lastProbeAt = Date.now();
       return true;

@@ -1,22 +1,25 @@
 import { isDatabaseReachable } from "@/lib/db-health";
 
-/** Плашка для сегмента /admin: не используется внутри client-only страниц. */
+/** Плашка только в dev, когда БД недоступна. На prod не показываем — там должна быть живая Supabase. */
 export async function AdminDbBanner() {
+  if (process.env.NODE_ENV === "production") return null;
+
   const dbOk = await isDatabaseReachable();
   if (dbOk) return null;
 
   return (
     <div
       role="status"
-      className="border-b border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950 dark:border-amber-900/50 dark:bg-amber-950/50 dark:text-amber-50 lg:pl-[calc(280px+1.5rem)]"
+      className="border-b border-amber-200/80 bg-amber-950/90 px-4 py-2 text-xs text-amber-100 lg:pl-[calc(280px+1.5rem)]"
     >
-      <p className="font-semibold">Работа без PostgreSQL (демо-режим)</p>
-      <p className="mt-1 max-w-4xl text-xs leading-relaxed text-amber-900/90 dark:text-amber-100/85">
-        <code className="rounded bg-amber-100/90 px-1 dark:bg-amber-900/60">DATABASE_URL</code> недоступен — показаны
-        мок-данные, запросы к БД не дублируются, чтобы не засорять консоль. Для полного CRUD поднимите PostgreSQL,
-        затем <code className="rounded bg-amber-100/90 px-1 dark:bg-amber-900/60">npx prisma db push</code> и{" "}
-        <code className="rounded bg-amber-100/90 px-1 dark:bg-amber-900/60">npm run prisma:seed</code>.
-      </p>
+      <span className="font-medium">Локально без БД</span>
+      <span className="mx-2 opacity-50">·</span>
+      <span className="opacity-90">
+        Проверьте <code className="rounded bg-amber-900/60 px-1">.env</code> или тестируйте на{" "}
+        <a href="https://project-072fj.vercel.app/admin" className="underline hover:text-white">
+          project-072fj.vercel.app
+        </a>
+      </span>
     </div>
   );
 }

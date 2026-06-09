@@ -12,6 +12,7 @@ export async function findCasesByQuery(
   query: string,
   limit = 5,
 ): Promise<CaseRow[]> {
+  if (workspaceId === "offline-workspace") return [];
   const q = query.trim();
   if (!q) return [];
 
@@ -48,6 +49,9 @@ export async function resolveCaseQuery(
 ): Promise<CaseResolveResult> {
   const q = query.trim();
   if (!q) return { type: "not_found", query: q };
+  if (workspaceId === "offline-workspace") {
+    return { type: "not_found", query: q };
+  }
 
   const exact = await prisma.legalCase.findFirst({
     where: { workspaceId, code: { equals: q, mode: "insensitive" } },

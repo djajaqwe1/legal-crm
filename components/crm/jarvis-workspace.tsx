@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import { Menu, PanelRightClose, PanelRightOpen, Plus, Sparkles } from "lucide-react";
+import { AlertCircle, Menu, PanelRightClose, PanelRightOpen, Plus, RefreshCw, Sparkles } from "lucide-react";
 import Link from "next/link";
 import { CrmSidebar } from "@/components/crm/sidebar";
 import { JarvisChat } from "@/components/crm/jarvis-chat";
@@ -12,11 +12,31 @@ import type { JarvisSessionListItem } from "@/lib/jarvis/sessions";
 import type { JarvisPresetId } from "@/lib/jarvis/presets";
 
 const HISTORY_KEY = "jarvis-history-open";
+const FETCH_TIMEOUT_MS = 12_000;
 
 function readHistoryOpen(): boolean {
   if (typeof window === "undefined") return true;
   const v = localStorage.getItem(HISTORY_KEY);
   return v !== "false";
+}
+
+async function fetchJson<T>(url: string, init?: RequestInit): Promise<{ ok: true; data: T } | { ok: false; status: number }> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+  try {
+    const res = await fetch(url, {
+      ...init,
+      credentials: "include",
+      signal: controller.signal,
+    });
+    if (!res.ok) return { ok: false, status: res.status };
+    const data = await res.json() as T;
+    return { ok: true, data };
+  } catch {
+    return { ok: false, status: 0 };
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 export function JarvisWorkspace() {
@@ -28,6 +48,7 @@ export function JarvisWorkspace() {
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [sessions, setSessions] = useState<JarvisSessionListItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   useEffect(() => {
     setHistoryOpen(readHistoryOpen());
@@ -38,34 +59,46 @@ export function JarvisWorkspace() {
   }, [historyOpen]);
 
   const refreshSessions = useCallback(async () => {
-    const res = await fetch("/api/ai/jarvis/sessions");
-    if (!res.ok) return;
-    const data = await res.json() as { sessions: JarvisSessionListItem[] };
-    setSessions(data.sessions ?? []);
-    return data.sessions ?? [];
+    const result = await fetchJson<{ sessions: JarvisSessionListItem[] }>("/api/ai/jarvis/sessions");
+    if (!result.ok) return null;
+    setSessions(result.data.sessions ?? []);
+    return result.data.sessions ?? [];
   }, []);
 
   const createSession = useCallback(async () => {
-    const res = await fetch("/api/ai/jarvis/sessions", { method: "POST" });
-    if (!res.ok) return null;
-    const data = await res.json() as { session: { id: string; title: string } };
-    setSessionId(data.session.id);
+    const result = await fetchJson<{ session: { id: string; title: string } }>("/api/ai/jarvis/sessions", {
+      method: "POST",
+    });
+    if (!result.ok) return null;
+    setSessionId(result.data.session.id);
     await refreshSessions();
-    return data.session.id;
+    return result.data.session.id;
   }, [refreshSessions]);
 
-  useEffect(() => {
-    void (async () => {
-      setLoading(true);
-      const list = await refreshSessions();
-      if (list?.length) {
-        setSessionId(list[0].id);
-      } else {
-        await createSession();
-      }
+  const bootstrap = useCallback(async () => {
+    setLoading(true);
+    setLoadError(null);
+    const list = await refreshSessions();
+    if (list === null) {
+      setLoadError("Не удалось загрузить чаты. Проверьте вход в систему или сеть.");
       setLoading(false);
-    })();
+      return;
+    }
+    if (list.length) {
+      setSessionId(list[0].id);
+      setLoading(false);
+      return;
+    }
+    const id = await createSession();
+    if (!id) {
+      setLoadError("Не удалось создать чат. Попробуйте ещё раз или войдите заново.");
+    }
+    setLoading(false);
   }, [refreshSessions, createSession]);
+
+  useEffect(() => {
+    void bootstrap();
+  }, [bootstrap]);
 
   const handleNewChat = async () => {
     await createSession();
@@ -80,13 +113,45 @@ export function JarvisWorkspace() {
     setSessions(prev => prev.map(s => (s.id === id ? { ...s, title } : s)));
   };
 
-  if (loading || !sessionId) {
+  if (loading) {
     return (
       <div className="flex h-screen items-center justify-center bg-zinc-50 dark:bg-zinc-950">
         <div className="flex items-center gap-3 text-sm text-zinc-500">
           <Sparkles className="h-5 w-5 animate-pulse text-violet-500" />
           Загрузка Джарвис…
         </div>
+      </div>
+    );
+  }
+
+  if (loadError || !sessionId) {
+    return (
+      <div className="flex h-screen flex-col items-center justify-center gap-4 bg-zinc-50 px-4 dark:bg-zinc-950">
+        <div className="flex max-w-md items-start gap-3 rounded-xl border border-amber-200/80 bg-amber-50 p-4 text-sm text-amber-950 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-100">
+          <AlertCircle className="mt-0.5 h-5 w-5 shrink-0" />
+          <div>
+            <p className="font-medium">{loadError ?? "Чат недоступен"}</p>
+            <p className="mt-1 text-xs opacity-80">
+              Если вы не вошли — откройте{" "}
+              <Link href="/login" className="underline">
+                /login
+              </Link>
+              . Для полной CRM —{" "}
+              <a href="https://project-072fj.vercel.app/admin" className="underline">
+                prod
+              </a>
+              .
+            </p>
+          </div>
+        </div>
+        <button
+          type="button"
+          onClick={() => void bootstrap()}
+          className="inline-flex items-center gap-2 rounded-lg bg-violet-600 px-4 py-2 text-sm font-medium text-white hover:bg-violet-500"
+        >
+          <RefreshCw className="h-4 w-4" />
+          Повторить
+        </button>
       </div>
     );
   }

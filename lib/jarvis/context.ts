@@ -4,6 +4,21 @@ import { caseStatusToRu } from "@/lib/case-status";
 import { getAvailableProviders } from "@/lib/llm/router";
 
 export async function buildWorkspaceSnapshot(workspaceId: string): Promise<string> {
+  if (workspaceId === "offline-workspace") {
+    const { getDashboardStats } = await import("@/lib/crm-repository");
+    const stats = await getDashboardStats();
+    const recent = stats.overdueCases
+      .slice(0, 3)
+      .map(c => `${c.code} «${c.title}»`)
+      .join("; ");
+    return [
+      `Демо без PostgreSQL. Дел: ${stats.totalCases}, клиентов: ${stats.totalClients}, договоров: ${stats.totalContracts}, просрочено: ${stats.overdueCases.length}.`,
+      recent ? `Примеры дел (мок): ${recent}.` : "",
+    ]
+      .filter(Boolean)
+      .join("\n");
+  }
+
   const [cases, clients, contracts, overdue, recentCases] = await Promise.all([
     prisma.legalCase.count({ where: { workspaceId } }),
     prisma.client.count({ where: { workspaceId } }),

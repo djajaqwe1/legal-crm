@@ -1,5 +1,4 @@
 import { NextResponse } from "next/server";
-import { resolveWorkspaceId } from "@/lib/workspace-scope";
 import { formatGeminiUserError } from "@/lib/gemini-models";
 import { buildJarvisSystemPrompt, buildWorkspaceSnapshot } from "@/lib/jarvis/context";
 import { runJarvisAgent, executeConfirmedAction } from "@/lib/jarvis/agent";
@@ -19,11 +18,10 @@ import { searchLegalGrounding } from "@/lib/legal-grounding/adilet-search";
 import { JARVIS_CAPABILITIES_REPLY } from "@/lib/jarvis/help";
 import { isVoiceConfirm, isVoiceDeny, READ_ONLY_TOOLS } from "@/lib/jarvis/types";
 import {
-  appendJarvisMessages,
-  autoTitleSession,
-  createJarvisSession,
-  getJarvisSession,
-} from "@/lib/jarvis/sessions";
+  ensureJarvisSession,
+  saveJarvisMessages,
+  autoTitleJarvisSession,
+} from "@/lib/jarvis/session-bridge";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 120;
@@ -166,11 +164,6 @@ export async function POST(req: Request) {
   }
 
   try {
-    const wid = await resolveWorkspaceId();
-    if (!wid) {
-      return NextResponse.json({ error: "Workspace not configured" }, { status: 503 });
-    }
-
     let body: {
       sessionId?: string;
       messages?: Array<{ role: "user" | "assistant"; content: string }>;
@@ -187,16 +180,13 @@ export async function POST(req: Request) {
 
     const { sessionId: rawSessionId, messages, confirmed, pendingAction, pageContext } = body;
 
-    let sessionId = rawSessionId;
-    if (!sessionId) {
-      const created = await createJarvisSession(wid, "Боковой ассистент");
-      sessionId = created.id;
+    const sessionResult = await ensureJarvisSession(rawSessionId);
+    if ("error" in sessionResult) {
+      return NextResponse.json({ error: sessionResult.error }, { status: sessionResult.status });
     }
-
-    const session = await getJarvisSession(wid, sessionId);
-    if (!session) {
-      return NextResponse.json({ error: "Сессия не найдена" }, { status: 404 });
-    }
+    const handle = sessionResult;
+    const { sessionId, workspaceId: wid, offline } = handle;
+    const isFirstUserMessage = handle.userMessageCount === 0;
 
     if (!Array.isArray(messages) || messages.length === 0) {
       return NextResponse.json({ error: "Сообщения не переданы" }, { status: 400 });
@@ -212,24 +202,32 @@ export async function POST(req: Request) {
 
     if (pendingAction && isVoiceDeny(lastText)) {
       const reply = "Действие отменено. Чем ещё помочь?";
-      await appendJarvisMessages(sessionId, [
+      await saveJarvisMessages(handle, [
         { role: "user", content: lastText },
         { role: "assistant", content: reply, metadata: { denied: true } },
       ]);
-      return NextResponse.json({ reply, needsConfirmation: false, sessionId });
+      return NextResponse.json({ reply, needsConfirmation: false, sessionId, offline });
     }
 
     const voiceConfirmed =
       Boolean(pendingAction) &&
       (confirmed || isVoiceConfirm(lastText));
 
-    const isFirstUserMessage = session.messages.filter(m => m.role === "user").length === 0;
-
     if (voiceConfirmed && pendingAction) {
+      if (offline) {
+        const reply =
+          "Демо без базы: сохранение в CRM недоступно. Откройте prod или настройте DATABASE_URL в .env.";
+        await saveJarvisMessages(handle, [
+          { role: "user", content: lastText },
+          { role: "assistant", content: reply, metadata: { denied: true } },
+        ]);
+        return NextResponse.json({ reply, needsConfirmation: false, sessionId, offline });
+      }
+
       const result = await executeConfirmedAction(wid, pendingAction.toolName, pendingAction.args ?? {});
       const reply = result.steps[0]?.success ? result.reply : `Не удалось: ${result.reply}`;
 
-      await appendJarvisMessages(sessionId, [
+      await saveJarvisMessages(handle, [
         { role: "user", content: lastText },
         {
           role: "assistant",
@@ -260,7 +258,7 @@ export async function POST(req: Request) {
     if (voiceCmd && !voiceConfirmed) {
       if (voiceCmd.instant) {
         const instant = await runInstantVoiceTool(wid, voiceCmd.toolName, voiceCmd.args);
-        await appendJarvisMessages(sessionId, [
+        await saveJarvisMessages(handle, [
           { role: "user", content: lastText },
           {
             role: "assistant",
@@ -280,7 +278,7 @@ export async function POST(req: Request) {
 
       const resolved = await resolveVoiceCaseArgs(wid, voiceCmd.args);
       if ("error" in resolved) {
-        await appendJarvisMessages(sessionId, [
+        await saveJarvisMessages(handle, [
           { role: "user", content: lastText },
           { role: "assistant", content: resolved.error },
         ]);
@@ -290,7 +288,7 @@ export async function POST(req: Request) {
       const nextPending = { toolName: voiceCmd.toolName, args: resolved.args };
       const reply = voiceCmd.confirmReply;
 
-      await appendJarvisMessages(sessionId, [
+      await saveJarvisMessages(handle, [
         { role: "user", content: lastText },
         {
           role: "assistant",
@@ -324,7 +322,7 @@ export async function POST(req: Request) {
       };
       const reply = buildIntakeConfirmReply(intake, grounding.contextBlock, grounding.documents.length);
 
-      await appendJarvisMessages(sessionId, [
+      await saveJarvisMessages(handle, [
         { role: "user", content: lastText },
         {
           role: "assistant",
@@ -338,8 +336,8 @@ export async function POST(req: Request) {
         },
       ]);
 
-      if (isFirstUserMessage && session.title === "Новый чат") {
-        void autoTitleSession(sessionId, intake.title);
+      if (isFirstUserMessage && handle.title === "Новый чат") {
+        void autoTitleJarvisSession(handle, intake.title);
       }
 
       return NextResponse.json({
@@ -359,7 +357,7 @@ export async function POST(req: Request) {
         const toolResult = await executeJarvisTool(wid, intent.toolName, intent.args);
         const reply = formatToolReply(intent.toolName, toolResult.data, toolResult.message);
 
-        await appendJarvisMessages(sessionId, [
+        await saveJarvisMessages(handle, [
           { role: "user", content: lastText },
           {
             role: "assistant",
@@ -371,8 +369,8 @@ export async function POST(req: Request) {
           },
         ]);
 
-        if (isFirstUserMessage && session.title === "Новый чат") {
-          void autoTitleSession(sessionId, lastText);
+        if (isFirstUserMessage && handle.title === "Новый чат") {
+          void autoTitleJarvisSession(handle, lastText);
         }
 
         return NextResponse.json({
@@ -407,7 +405,7 @@ export async function POST(req: Request) {
 
     const result = await runJarvisAgent(wid, systemPrompt, history, lastText);
 
-    await appendJarvisMessages(sessionId, [
+    await saveJarvisMessages(handle, [
       { role: "user", content: lastText },
       {
         role: "assistant",
@@ -422,8 +420,8 @@ export async function POST(req: Request) {
       },
     ]);
 
-    if (isFirstUserMessage && session.title === "Новый чат") {
-      void autoTitleSession(sessionId, lastText);
+    if (isFirstUserMessage && handle.title === "Новый чат") {
+      void autoTitleJarvisSession(handle, lastText);
     }
 
     return NextResponse.json({

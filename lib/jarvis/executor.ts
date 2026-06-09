@@ -14,6 +14,7 @@ import { FORBIDDEN_TOOLS, TOOL_LABELS } from "./types";
 import type { JarvisAction, JarvisToolResult } from "./types";
 import { buildFallbackDocument } from "./document-fallback";
 import { JARVIS_CAPABILITIES_REPLY } from "./help";
+import { guardOfflineTool } from "./offline-tools";
 
 const GEMINI_KEY = process.env.GEMINI_API_KEY ?? "";
 
@@ -80,6 +81,9 @@ export async function executeJarvisTool(
       message: `Операция «${toolName}» запрещена политикой безопасности. Удаление записей только вручную через интерфейс CRM.`,
     };
   }
+
+  const offline = await guardOfflineTool(toolName, args);
+  if (offline) return offline;
 
   const actions: JarvisAction[] = [];
 
