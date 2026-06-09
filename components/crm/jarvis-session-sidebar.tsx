@@ -12,6 +12,7 @@ import {
   X,
 } from "lucide-react";
 import type { JarvisSessionListItem } from "@/lib/jarvis/sessions";
+import { fetchJson } from "@/lib/client-fetch";
 
 type Props = {
   sessions: JarvisSessionListItem[];
@@ -31,6 +32,7 @@ export function JarvisSessionSidebar({
   onClose,
 }: Props) {
   const [query, setQuery] = useState("");
+  const [actionError, setActionError] = useState<string | null>(null);
 
   const filtered = sessions.filter(s => {
     const q = query.toLowerCase();
@@ -46,17 +48,27 @@ export function JarvisSessionSidebar({
   const projects = [...new Set(sessions.map(s => s.project).filter(Boolean))] as string[];
 
   async function togglePin(id: string, pinned: boolean) {
-    await fetch(`/api/ai/jarvis/sessions/${id}`, {
+    setActionError(null);
+    const result = await fetchJson<{ session: { id: string } }>(`/api/ai/jarvis/sessions/${id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ pinned: !pinned }),
     });
+    if (!result.ok) {
+      setActionError("Не удалось изменить закрепление");
+      return;
+    }
     onRefresh();
   }
 
   async function deleteSession(id: string) {
     if (!confirm("Удалить этот чат?")) return;
-    await fetch(`/api/ai/jarvis/sessions/${id}`, { method: "DELETE" });
+    setActionError(null);
+    const result = await fetchJson<{ ok: boolean }>(`/api/ai/jarvis/sessions/${id}`, { method: "DELETE" });
+    if (!result.ok) {
+      setActionError("Не удалось удалить чат");
+      return;
+    }
     onRefresh();
     if (id === activeSessionId) onNewChat();
   }
@@ -123,6 +135,11 @@ export function JarvisSessionSidebar({
       </div>
 
       <div className="p-3">
+        {actionError && (
+          <p className="mb-2 rounded-lg bg-red-50 px-2 py-1.5 text-[10px] text-red-600 dark:bg-red-950/30 dark:text-red-300">
+            {actionError}
+          </p>
+        )}
         <button
           type="button"
           onClick={onNewChat}

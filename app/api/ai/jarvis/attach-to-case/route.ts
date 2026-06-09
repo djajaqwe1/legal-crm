@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { resolveWorkspaceId } from "@/lib/workspace-scope";
+import { isDatabaseReachable } from "@/lib/db-health";
 import { resolveCaseQuery } from "@/lib/jarvis/case-resolve";
 import { appendJarvisMessages } from "@/lib/jarvis/sessions";
 import { addDocument } from "@/lib/crm-repository";
@@ -19,8 +20,21 @@ const ALLOWED = new Set([
 ]);
 
 export async function POST(req: Request) {
+  if (!(await isDatabaseReachable())) {
+    return NextResponse.json(
+      {
+        error:
+          "Демо без базы: прикрепление файлов к делам недоступно. Откройте https://project-072fj.vercel.app/admin или настройте DATABASE_URL.",
+        offline: true,
+      },
+      { status: 503 },
+    );
+  }
+
   const wid = await resolveWorkspaceId();
-  if (!wid) return NextResponse.json({ error: "Workspace not configured" }, { status: 503 });
+  if (!wid) {
+    return NextResponse.json({ error: "Workspace not configured" }, { status: 503 });
+  }
 
   try {
     const form = await req.formData();

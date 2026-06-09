@@ -30,6 +30,7 @@ export function JarvisWorkspace() {
   const [sessions, setSessions] = useState<JarvisSessionListItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [offlineMode, setOfflineMode] = useState(false);
 
   useEffect(() => {
     setHistoryOpen(readHistoryOpen());
@@ -40,8 +41,9 @@ export function JarvisWorkspace() {
   }, [historyOpen]);
 
   const refreshSessions = useCallback(async () => {
-    const result = await fetchJson<{ sessions: JarvisSessionListItem[] }>("/api/ai/jarvis/sessions");
+    const result = await fetchJson<{ sessions: JarvisSessionListItem[]; offline?: boolean }>("/api/ai/jarvis/sessions");
     if (!result.ok) return null;
+    setOfflineMode(result.data.offline === true);
     setSessions(result.data.sessions ?? []);
     return result.data.sessions ?? [];
   }, []);
@@ -154,6 +156,14 @@ export function JarvisWorkspace() {
       )}
 
       <div className="flex min-w-0 flex-1 flex-col">
+        {offlineMode && (
+          <div className="border-b border-amber-200/80 bg-amber-50 px-3 py-1.5 text-[11px] text-amber-900 dark:border-amber-900 dark:bg-amber-950/50 dark:text-amber-100">
+            Демо без БД — чат работает, загрузка файлов и сохранение дел только на{" "}
+            <a href="https://project-072fj.vercel.app/admin" className="underline">
+              prod
+            </a>
+          </div>
+        )}
         <header className="flex h-14 shrink-0 items-center gap-2 border-b border-zinc-200/80 bg-white/80 px-3 backdrop-blur dark:border-zinc-800 dark:bg-zinc-950/80">
           <button
             type="button"

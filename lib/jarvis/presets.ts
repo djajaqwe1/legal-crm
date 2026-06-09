@@ -20,6 +20,12 @@ export type JarvisPreset = {
   fileHint?: string;
 };
 
+export const PRESET_FILE_ACCEPT: Partial<Record<JarvisPresetId, string>> = {
+  register_case: ".txt,.pdf,text/plain,application/pdf",
+  attach_documents:
+    ".pdf,.txt,.doc,.docx,.jpg,.jpeg,.png,application/pdf,text/plain,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,image/jpeg,image/png",
+};
+
 export const JARVIS_PRESETS: JarvisPreset[] = [
   {
     id: "chat",

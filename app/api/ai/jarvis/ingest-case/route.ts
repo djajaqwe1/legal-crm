@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { prisma } from "@/lib/prisma";
 import { resolveWorkspaceId } from "@/lib/workspace-scope";
+import { isDatabaseReachable } from "@/lib/db-health";
 import { GEMINI_MODELS, formatGeminiUserError } from "@/lib/gemini-models";
 import { CaseKind, CaseStatus, ClientCategory, CourtInstance } from "@/lib/generated-client";
 import { ruToCaseStatus } from "@/lib/case-status";
@@ -26,6 +27,17 @@ async function extractText(file: File): Promise<string> {
 export async function POST(req: Request) {
   if (!process.env.GEMINI_API_KEY) {
     return NextResponse.json({ error: "GEMINI_API_KEY не настроен" }, { status: 503 });
+  }
+
+  if (!(await isDatabaseReachable())) {
+    return NextResponse.json(
+      {
+        error:
+          "Демо без базы: регистрация дел из файлов недоступна. Откройте https://project-072fj.vercel.app/admin или настройте DATABASE_URL.",
+        offline: true,
+      },
+      { status: 503 },
+    );
   }
 
   const wid = await resolveWorkspaceId();

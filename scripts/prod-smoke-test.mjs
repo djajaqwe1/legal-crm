@@ -149,6 +149,30 @@ async function main() {
     simpleCaseData.pendingAction?.toolName ?? "?",
   );
 
+  const sessList = await fetch(`${BASE}/api/ai/jarvis/sessions`, { headers: { Cookie: cookieHeader() } });
+  const sessListData = await sessList.json();
+  ok("Jarvis sessions list", sessList.ok && Array.isArray(sessListData.sessions), String(sessListData.sessions?.length ?? 0));
+
+  const sessCreate = await fetch(`${BASE}/api/ai/jarvis/sessions`, {
+    method: "POST",
+    headers: { Cookie: cookieHeader() },
+  });
+  ok("Jarvis sessions create", sessCreate.status === 201, String(sessCreate.status));
+
+  const dlRes = await fetch(`${BASE}/api/ai/jarvis`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Cookie: cookieHeader() },
+    body: JSON.stringify({
+      messages: [{ role: "user", content: "перенеси дедлайн дела иванова на 15 июня" }],
+    }),
+  });
+  const dlData = await dlRes.json();
+  ok(
+    "Jarvis deadline voice",
+    dlRes.ok && dlData.pendingAction?.toolName === "update_case" && Boolean(dlData.pendingAction?.args?.value),
+    dlData.pendingAction?.toolName ?? (dlData.reply ?? "").slice(0, 50),
+  );
+
   // Security & routing
   const noAuthJarvis = await fetch(`${BASE}/api/ai/jarvis`, {
     method: "POST",

@@ -13,12 +13,14 @@ type SpeechResultEvent = {
   resultIndex?: number;
 };
 
+type SpeechErrorEvent = { error?: string };
+
 type SpeechRecognitionInstance = {
   lang: string;
   continuous: boolean;
   interimResults: boolean;
   onresult: ((e: SpeechResultEvent) => void) | null;
-  onerror: (() => void) | null;
+  onerror: ((e: SpeechErrorEvent) => void) | null;
   onend: (() => void) | null;
   onstart: (() => void) | null;
   start: () => void;
@@ -46,6 +48,23 @@ function formatDuration(seconds: number): string {
   return `${m}:${String(s).padStart(2, "0")}`;
 }
 
+function mapSpeechError(code: string): string {
+  switch (code) {
+    case "not-allowed":
+      return "Доступ к микрофону запрещён — разрешите в настройках браузера.";
+    case "no-speech":
+      return "Не услышал речь. Попробуйте ещё раз.";
+    case "audio-capture":
+      return "Микрофон недоступен или занят другим приложением.";
+    case "network":
+      return "Сеть недоступна для распознавания речи.";
+    case "aborted":
+      return "Запись прервана.";
+    default:
+      return "Ошибка распознавания речи.";
+  }
+}
+
 export function useJarvisVoice({
   onRecordingComplete,
   onTranscript,
@@ -54,6 +73,7 @@ export function useJarvisVoice({
   const [isListening, setIsListening] = useState(false);
   const [interim, setInterim] = useState("");
   const [recordingSeconds, setRecordingSeconds] = useState(0);
+  const [voiceError, setVoiceError] = useState<string | null>(null);
 
   const recognitionRef = useRef<SpeechRecognitionInstance | null>(null);
   const listeningRef = useRef(false);
@@ -66,6 +86,8 @@ export function useJarvisVoice({
 
   onCompleteRef.current = onRecordingComplete;
   onTranscriptRef.current = onTranscript;
+
+  const clearVoiceError = useCallback(() => setVoiceError(null), []);
 
   const clearTimer = useCallback(() => {
     if (timerRef.current) {
@@ -108,10 +130,11 @@ export function useJarvisVoice({
     const w = window as WindowWithSpeech;
     const SR = w.SpeechRecognition ?? w.webkitSpeechRecognition;
     if (!SR) {
-      alert("Голосовой ввод доступен в Chrome или Edge.");
+      setVoiceError("Голосовой ввод доступен в Chrome или Edge.");
       return;
     }
 
+    setVoiceError(null);
     finalBufferRef.current = "";
     latestTranscriptRef.current = "";
     setInterim("");
@@ -133,11 +156,31 @@ export function useJarvisVoice({
       }, 1000);
     };
 
-    recognition.onerror = () => {
+    recognition.onerror = (event) => {
+      const code = event?.error ?? "unknown";
+      if (code === "no-speech") {
+        if (listeningRef.current) {
+          try {
+            recognition.start();
+          } catch {
+            finalizeRecording();
+          }
+        }
+        return;
+      }
+      if (code === "not-allowed" || code === "aborted" || code === "audio-capture") {
+        setVoiceError(mapSpeechError(code));
+        listeningRef.current = false;
+        clearTimer();
+        setIsListening(false);
+        finalizeRecording();
+        return;
+      }
       if (listeningRef.current) {
         try {
           recognition.start();
         } catch {
+          setVoiceError(mapSpeechError(code));
           finalizeRecording();
         }
       }
@@ -156,7 +199,6 @@ export function useJarvisVoice({
     };
 
     recognition.onresult = (event) => {
-      // Web Speech API отдаёт весь список results на каждый callback — нельзя append повторно.
       let finalized = "";
       let interimText = "";
       const start = typeof event.resultIndex === "number" ? event.resultIndex : 0;
@@ -186,6 +228,7 @@ export function useJarvisVoice({
     } catch {
       listeningRef.current = false;
       setIsListening(false);
+      setVoiceError("Не удалось запустить микрофон.");
     }
   }, [clearTimer, finalizeRecording, mode]);
 
@@ -207,6 +250,8 @@ export function useJarvisVoice({
     interim,
     recordingSeconds,
     recordingDuration: formatDuration(recordingSeconds),
+    voiceError,
+    clearVoiceError,
     toggleListening,
     startListening,
     stopListening,
@@ -271,5 +316,4 @@ function primeVoices() {
   voicesPrimed = true;
 }
 
-// Back-compat for jarvis-chat
 export { isVoiceConfirmText as isVoiceConfirm };

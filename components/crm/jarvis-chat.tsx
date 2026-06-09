@@ -9,7 +9,7 @@ import { JarvisIntakeResultCard, JarvisResultCard } from "@/components/crm/jarvi
 import { useJarvisVoice, isVoiceConfirm } from "@/components/crm/use-jarvis-voice";
 import { JarvisSpeakButton } from "@/components/crm/jarvis-speak-button";
 import { isVoiceDeny } from "@/lib/jarvis/types";
-import { JARVIS_PRESETS, getPreset, PRESET_FAST_COMMAND, type JarvisPresetId } from "@/lib/jarvis/presets";
+import { JARVIS_PRESETS, getPreset, PRESET_FAST_COMMAND, PRESET_FILE_ACCEPT, type JarvisPresetId } from "@/lib/jarvis/presets";
 import { VOICE_COMMAND_EXAMPLES, matchRegisterCaseVoice, parseAttachToCaseVoice } from "@/lib/jarvis/voice-commands";
 import { extractCaseHintFromPageContext } from "@/lib/jarvis/case-resolve";
 import type { JarvisAction, JarvisStep } from "@/lib/jarvis/types";
@@ -279,6 +279,11 @@ export function JarvisChat({
     void loadHistory();
   }, [loadHistory]);
 
+  useEffect(() => {
+    if (initialPreset) setPresetId(initialPreset);
+    if (initialCaseQuery) setAttachCaseQuery(initialCaseQuery);
+  }, [initialPreset, initialCaseQuery]);
+
   const applyActions = useCallback((actions?: JarvisAction[], toolUsed?: string) => {
     if (!actions?.length) return;
     for (const a of actions) {
@@ -517,7 +522,7 @@ export function JarvisChat({
 
   sendRef.current = sendMessage;
 
-  const { isListening, interim, recordingDuration, toggleListening } = useJarvisVoice({
+  const { isListening, interim, recordingDuration, voiceError, clearVoiceError, toggleListening } = useJarvisVoice({
     onRecordingComplete: (text) => {
       if (pendingRef.current && isVoiceConfirm(text)) {
         void sendRef.current(text, true, pendingRef.current);
@@ -551,8 +556,9 @@ export function JarvisChat({
         return;
       }
       const merged = inputRef.current.trim() ? `${inputRef.current.trim()} ${text}` : text;
-      inputRef.current = merged;
-      setInput(merged);
+      inputRef.current = "";
+      setInput("");
+      void sendRef.current(merged);
     },
   });
 
@@ -628,6 +634,18 @@ export function JarvisChat({
             className="shrink-0 rounded-md bg-amber-200/80 px-2 py-1 font-medium hover:bg-amber-300 dark:bg-amber-900 dark:hover:bg-amber-800"
           >
             Повторить
+          </button>
+        </div>
+      )}
+      {voiceError && (
+        <div className="flex items-center justify-between gap-2 border-b border-red-200 bg-red-50 px-4 py-2 text-xs text-red-800 dark:border-red-900 dark:bg-red-950/40 dark:text-red-200">
+          <span>{voiceError}</span>
+          <button
+            type="button"
+            onClick={clearVoiceError}
+            className="shrink-0 rounded-md px-2 py-1 font-medium hover:bg-red-100 dark:hover:bg-red-900"
+          >
+            OK
           </button>
         </div>
       )}
@@ -746,7 +764,7 @@ export function JarvisChat({
                   ref={fileInputRef}
                   type="file"
                   multiple
-                  accept=".txt,.pdf,text/plain,application/pdf"
+                  accept={PRESET_FILE_ACCEPT[presetId] ?? PRESET_FILE_ACCEPT.register_case}
                   className="hidden"
                   onChange={e => setFiles(Array.from(e.target.files ?? []))}
                 />

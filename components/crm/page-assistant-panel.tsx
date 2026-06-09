@@ -14,6 +14,7 @@ import { isVoiceDeny } from "@/lib/jarvis/types";
 import { matchRegisterCaseVoice, parseAttachToCaseVoice } from "@/lib/jarvis/voice-commands";
 import { extractCaseHintFromPageContext } from "@/lib/jarvis/case-resolve";
 import { JarvisResultCard } from "@/components/crm/jarvis-result-card";
+import { fetchJson } from "@/lib/client-fetch";
 
 const PANEL_SESSION_KEY = "jarvis-panel-session-id";
 
@@ -75,7 +76,7 @@ export function PageAssistantPanel({ pageContext }: Props) {
   }, [messages]);
 
   useEffect(() => {
-    if (open && messages.length === 0) {
+    if (open && messages.length === 0 && !sessionIdRef.current) {
       const greeting = pageContext
         ? `Привет! Я Джарвис. Контекст: ${pageContext}. Говорите задачу голосом — создам дело, задачу или документ.`
         : "Привет! Я Джарвис. Говорите голосом или текстом — выполню команды CRM. Для изменений спрошу «Разрешаю?»";
@@ -84,6 +85,36 @@ export function PageAssistantPanel({ pageContext }: Props) {
       });
     }
   }, [open, messages.length, pageContext]);
+
+  useEffect(() => {
+    if (!open || !sessionIdRef.current) return;
+    void (async () => {
+      const sid = sessionIdRef.current!;
+      const result = await fetchJson<{
+        session: { messages: Array<{ id: string; role: string; content: string; metadata?: Record<string, unknown> }> };
+      }>(`/api/ai/jarvis/sessions/${sid}`);
+      if (!result.ok) {
+        if (result.status === 404) {
+          localStorage.removeItem(PANEL_SESSION_KEY);
+          setSessionId(null);
+          sessionIdRef.current = null;
+        }
+        return;
+      }
+      const loaded = result.data.session.messages
+        .filter(m => m.role === "user" || m.role === "assistant")
+        .map(m => ({
+          id: m.id,
+          role: m.role as "user" | "assistant",
+          content: m.content,
+          toolUsed: m.metadata?.toolUsed as string | undefined,
+          toolResult: m.metadata?.toolResult as ToolResult,
+          needsConfirmation: Boolean(m.metadata?.needsConfirmation),
+          pendingAction: m.metadata?.pendingAction as PendingAction | undefined,
+        }));
+      if (loaded.length) setMessages(loaded);
+    })();
+  }, [open]);
 
   const sendMessage = useCallback(async (
     text: string,
@@ -105,10 +136,18 @@ export function PageAssistantPanel({ pageContext }: Props) {
     setIsLoading(true);
 
     try {
-      const res = await fetch("/api/ai/jarvis", {
+      const result = await fetchJson<{
+        reply?: string;
+        error?: string;
+        sessionId?: string;
+        toolUsed?: string;
+        toolResult?: ToolResult;
+        actions?: JarvisAction[];
+        needsConfirmation?: boolean;
+        pendingAction?: PendingAction;
+      }>("/api/ai/jarvis", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        credentials: "include",
         body: JSON.stringify({
           sessionId: sessionIdRef.current ?? undefined,
           messages: history.filter(m => m.id !== "init").map(m => ({ role: m.role, content: m.content })),
@@ -118,28 +157,19 @@ export function PageAssistantPanel({ pageContext }: Props) {
         }),
       });
 
-      const data = await res.json() as {
-        reply?: string;
-        error?: string;
-        sessionId?: string;
-        toolUsed?: string;
-        toolResult?: ToolResult;
-        actions?: JarvisAction[];
-        needsConfirmation?: boolean;
-        pendingAction?: PendingAction;
-      };
-
-      if (!res.ok) {
+      if (!result.ok) {
         setMessages(prev => [...prev, {
           id: (Date.now() + 1).toString(),
           role: "assistant",
-          content: res.status === 401
+          content: result.status === 401
             ? "Сессия истекла — войдите на /login"
-            : `Ошибка: ${data.error ?? res.status}`,
+            : `Ошибка сервера (${result.status})`,
           isError: true,
         }]);
         return;
       }
+
+      const data = result.data;
 
       if (data.sessionId) persistSessionId(data.sessionId);
 
@@ -252,6 +282,8 @@ export function PageAssistantPanel({ pageContext }: Props) {
     isListening,
     interim,
     recordingDuration,
+    voiceError,
+    clearVoiceError,
     toggleListening,
   } = useJarvisVoice({ onRecordingComplete, mode: "accumulate" });
 
@@ -292,6 +324,14 @@ export function PageAssistantPanel({ pageContext }: Props) {
           </div>
 
           <div className="flex-1 overflow-y-auto p-4 space-y-3 min-h-0">
+            {voiceError && (
+              <div className="flex items-start justify-between gap-2 rounded-lg border border-red-200 bg-red-50 px-2 py-1.5 text-[10px] text-red-700 dark:border-red-900 dark:bg-red-950/30 dark:text-red-200">
+                <span>{voiceError}</span>
+                <button type="button" onClick={clearVoiceError} className="shrink-0 font-medium underline">
+                  OK
+                </button>
+              </div>
+            )}
             {messages.map(msg => (
               <div key={msg.id} className={`flex gap-2 ${msg.role === "user" ? "flex-row-reverse" : "flex-row"}`}>
                 <div className="flex flex-col gap-1.5 max-w-[85%]">
