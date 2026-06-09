@@ -52,5 +52,8 @@ export function formatGeminiUserError(message: string): string {
   if (m.includes("can't reach database") || m.includes("p1001") || m.includes("econnrefused")) {
     return "Не удалось подключиться к базе данных. Проверьте DATABASE_URL в Vercel.";
   }
-  return "Не удалось получить ответ от AI. Попробуйте ещё раз.";
+  if (m.includes("api key") || m.includes("gemini_api_key")) {
+    return "GEMINI_API_KEY не настроен. Используйте голосовые команды из списка или настройте ключ в Vercel.";
+  }
+  return "Не удалось получить ответ от AI. Попробуйте голосовую команду целиком — например «перенеси дедлайн дела Иванова на 15 июня» или «что ты умеешь?».";
 }

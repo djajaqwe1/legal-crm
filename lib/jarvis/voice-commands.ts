@@ -255,8 +255,23 @@ function matchCreateContract(text: string): VoiceCommand | null {
   };
 }
 
-/** «перенеси дедлайн дела иванова на 15 июня» / «через 2 недели» */
+/** «перенеси дедлайн дела иванова на 15 июня» / «через 2 недели» / «обнови дедлайн на 15 июня» (на экране дела) */
 function matchUpdateDeadline(text: string, opts?: VoiceMatchOptions): VoiceCommand | null {
+  const dateOnly = text.match(
+    /(?:перенеси|поставь|измени|обнови)\s+дедлайн\s+(?:на|через)\s+(.+)/i,
+  );
+  if (dateOnly && opts?.defaultCaseQuery) {
+    const deadline = parseDeadlinePhrase(dateOnly[1]);
+    if (deadline) {
+      const deadlineRu = new Date(deadline).toLocaleDateString("ru-RU");
+      return {
+        toolName: "update_case",
+        args: { caseQuery: opts.defaultCaseQuery, field: "deadline", value: deadline },
+        confirmReply: `Перенесу дедлайн дела «${opts.defaultCaseQuery}» на ${deadlineRu}. Разрешаете?`,
+      };
+    }
+  }
+
   const m = text.match(
     /(?:перенеси|поставь|измени|обнови)\s+дедлайн\s+(?:дела\s+)?(.+?)\s+(?:на|через)\s+(.+)/i,
   );
@@ -271,6 +286,36 @@ function matchUpdateDeadline(text: string, opts?: VoiceMatchOptions): VoiceComma
     args: { caseQuery, field: "deadline", value: deadline },
     confirmReply: `Перенесу дедлайн дела «${caseQuery}» на ${deadlineRu}. Разрешаете?`,
   };
+}
+
+/** Неполная команда — подсказка вместо падения в Gemini. */
+export function matchIncompleteVoiceHint(text: string, opts?: VoiceMatchOptions): string | null {
+  const raw = text.trim();
+  if (!raw) return null;
+
+  if (/^(?:перенеси|поставь|измени|обнови)\s+дедлайн\s*$/i.test(raw)) {
+    return opts?.defaultCaseQuery
+      ? `Укажите новую дату для дела «${opts.defaultCaseQuery}». Например: «перенеси дедлайн на 15 июня» или «через 2 недели».`
+      : "Укажите дело и дату. Например: «перенеси дедлайн дела Иванова на 15 июня» или «через 2 недели».";
+  }
+
+  if (/^(?:перенеси|поставь|измени|обнови)\s+дедлайн\s+(?:на|через)\s+/i.test(raw) && !opts?.defaultCaseQuery) {
+    return "Укажите, для какого дела. Например: «перенеси дедлайн дела Иванова на 15 июня».";
+  }
+
+  const partialCase = raw.match(/^(?:перенеси|поставь|измени|обнови)\s+дедлайн\s+(?:дела\s+)?(.+)$/i);
+  if (partialCase && !/(?:на|через)\s+/i.test(raw)) {
+    const caseQuery = partialCase[1].trim();
+    if (caseQuery && !parseDeadlinePhrase(caseQuery)) {
+      return `Укажите новую дату для дела «${caseQuery}». Например: «на 15 июня» или «через 2 недели».`;
+    }
+  }
+
+  if (/^(?:создай|добавь|сгенерируй|примени)\s+\S+\s*$/i.test(raw)) {
+    return "Команда неполная. Опишите подробнее или скажите «что ты умеешь?» — покажу примеры.";
+  }
+
+  return null;
 }
 
 /** «отметь задачу … выполненной» — два порядка слов */

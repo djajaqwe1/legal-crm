@@ -38,6 +38,12 @@ function matchNavigate(text) {
   return null;
 }
 
+function matchIncompleteHint(text) {
+  const raw = text.trim();
+  if (/^(?:перенеси|поставь|измени|обнови)\s+дедлайн\s*$/i.test(raw)) return true;
+  return false;
+}
+
 function parseDeadlinePhrase(phrase) {
   const MONTHS = { январ: 0, феврал: 1, март: 2, апрел: 3, май: 4, июн: 5, июл: 6, август: 7, сентябр: 8, октябр: 9, ноябр: 10, декабр: 11 };
   const p = phrase.trim().toLowerCase();
@@ -47,7 +53,6 @@ function parseDeadlinePhrase(phrase) {
   }
   return false;
 }
-
 const cases = [
   { input: "что ты умеешь?", wantHelp: true, wantCase: false },
   { input: "что ты вообще умеешь делать и зачем ты озвучиваешь", wantHelp: true, wantCase: false },
@@ -56,6 +61,7 @@ const cases = [
   { input: "что CRM показывает", wantHelp: false, wantCase: false },
   { input: "открой реестр дел", wantNav: "cases" },
   { input: "15 июня", wantDate: true },
+  { input: "обнови дедлайн", wantIncomplete: true },
 ];
 
 let pass = 0;
@@ -64,11 +70,13 @@ for (const c of cases) {
   const brief = matchCaseBrief(c.input);
   const nav = matchNavigate(c.input);
   const date = c.wantDate ? parseDeadlinePhrase(c.input) : null;
+  const incomplete = c.wantIncomplete ? matchIncompleteHint(c.input) : null;
   const okHelp = c.wantHelp === undefined || help === c.wantHelp;
   const okCase = c.wantCase === undefined || !!brief === c.wantCase;
   const okNav = c.wantNav === undefined || nav === c.wantNav;
   const okDate = c.wantDate === undefined || date === c.wantDate;
-  const ok = okHelp && okCase && okNav && okDate;
+  const okIncomplete = c.wantIncomplete === undefined || incomplete === c.wantIncomplete;
+  const ok = okHelp && okCase && okNav && okDate && okIncomplete;
   if (ok) pass++;
   console.log(`${ok ? "✓" : "✗"} "${c.input.slice(0, 50)}" help=${help} brief=${!!brief} nav=${nav ?? "-"} date=${date ?? "-"}`);
 }

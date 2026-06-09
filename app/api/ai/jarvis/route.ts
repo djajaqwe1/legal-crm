@@ -8,7 +8,7 @@ import {
   parseCaseIntakeRequest,
   buildIntakeConfirmReply,
 } from "@/lib/jarvis/case-intake";
-import { matchVoiceCommand } from "@/lib/jarvis/voice-commands";
+import { matchVoiceCommand, matchIncompleteVoiceHint } from "@/lib/jarvis/voice-commands";
 import {
   extractCaseHintFromPageContext,
   formatCaseDisambiguation,
@@ -310,6 +310,20 @@ export async function POST(req: Request) {
         reply,
         pendingAction: nextPending,
         needsConfirmation: true,
+        sessionId,
+      });
+    }
+
+    const incompleteHint = matchIncompleteVoiceHint(lastText, { defaultCaseQuery });
+    if (incompleteHint && !voiceConfirmed) {
+      await saveJarvisMessages(handle, [
+        { role: "user", content: lastText },
+        { role: "assistant", content: incompleteHint, metadata: { toolUsed: "jarvis_help" } },
+      ]);
+      return NextResponse.json({
+        reply: incompleteHint,
+        toolUsed: "jarvis_help",
+        needsConfirmation: false,
         sessionId,
       });
     }

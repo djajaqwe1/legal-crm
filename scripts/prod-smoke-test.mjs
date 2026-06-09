@@ -202,6 +202,19 @@ async function main() {
     docxRes.headers.get("content-type") ?? "?",
   );
 
+  // Incomplete deadline — подсказка вместо Gemini
+  const incompleteRes = await fetch(`${BASE}/api/ai/jarvis`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Cookie: cookieHeader() },
+    body: JSON.stringify({ messages: [{ role: "user", content: "обнови дедлайн" }] }),
+  });
+  const incompleteData = await incompleteRes.json();
+  ok(
+    "Jarvis incomplete deadline hint",
+    incompleteRes.ok && /Укажите|Пример|15 июня/i.test(incompleteData.reply ?? ""),
+    (incompleteData.reply ?? incompleteData.error ?? "").slice(0, 60),
+  );
+
   // Security & routing
   const noAuthJarvis = await fetch(`${BASE}/api/ai/jarvis`, {
     method: "POST",
