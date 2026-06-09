@@ -10,33 +10,14 @@ import { JarvisSessionSidebar } from "@/components/crm/jarvis-session-sidebar";
 import { ThemeToggle } from "@/components/crm/theme-toggle";
 import type { JarvisSessionListItem } from "@/lib/jarvis/sessions";
 import type { JarvisPresetId } from "@/lib/jarvis/presets";
+import { fetchJson } from "@/lib/client-fetch";
 
 const HISTORY_KEY = "jarvis-history-open";
-const FETCH_TIMEOUT_MS = 12_000;
 
 function readHistoryOpen(): boolean {
   if (typeof window === "undefined") return true;
   const v = localStorage.getItem(HISTORY_KEY);
   return v !== "false";
-}
-
-async function fetchJson<T>(url: string, init?: RequestInit): Promise<{ ok: true; data: T } | { ok: false; status: number }> {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
-  try {
-    const res = await fetch(url, {
-      ...init,
-      credentials: "include",
-      signal: controller.signal,
-    });
-    if (!res.ok) return { ok: false, status: res.status };
-    const data = await res.json() as T;
-    return { ok: true, data };
-  } catch {
-    return { ok: false, status: 0 };
-  } finally {
-    clearTimeout(timer);
-  }
 }
 
 export function JarvisWorkspace() {

@@ -102,6 +102,15 @@ async function runInstantVoiceTool(
   }
 
   if (toolName === "case_brief") {
+    if (workspaceId === "offline-workspace") {
+      return {
+        reply:
+          "Поиск дел по базе недоступен в демо без PostgreSQL. Откройте https://project-072fj.vercel.app/admin или настройте DATABASE_URL.",
+        toolUsed: "find_case",
+        toolResult: null,
+        actions: [],
+      };
+    }
     const resolved = await resolveVoiceCaseArgs(workspaceId, args);
     if ("error" in resolved) {
       return { reply: resolved.error, toolUsed: "find_case", toolResult: null, actions: [] };

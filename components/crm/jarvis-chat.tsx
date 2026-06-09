@@ -14,6 +14,7 @@ import { VOICE_COMMAND_EXAMPLES, matchRegisterCaseVoice, parseAttachToCaseVoice 
 import { extractCaseHintFromPageContext } from "@/lib/jarvis/case-resolve";
 import type { JarvisAction, JarvisStep } from "@/lib/jarvis/types";
 import { TOOL_LABELS } from "@/lib/jarvis/types";
+import { fetchJson } from "@/lib/client-fetch";
 
 type ToolResult = Record<string, unknown> | unknown[] | null;
 
@@ -215,6 +216,7 @@ export function JarvisChat({
   const [isLoading, setIsLoading] = useState(false);
   const [loadingHint, setLoadingHint] = useState("Думаю…");
   const [loadingHistory, setLoadingHistory] = useState(true);
+  const [historyError, setHistoryError] = useState<string | null>(null);
   const [pendingAction, setPendingAction] = useState<Message["pendingAction"]>(undefined);
   const [attachCaseQuery, setAttachCaseQuery] = useState(initialCaseQuery ?? "");
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -232,42 +234,50 @@ export function JarvisChat({
     endRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, isLoading]);
 
-  useEffect(() => {
-    void (async () => {
-      setLoadingHistory(true);
-      setMessages([]);
-      setPendingAction(undefined);
-      setFiles([]);
-      setPresetId(initialPreset ?? "chat");
-      setAttachCaseQuery(initialCaseQuery ?? "");
-      try {
-        const res = await fetch(`/api/ai/jarvis/sessions/${sessionId}`);
-        if (!res.ok) throw new Error("load failed");
-        const data = await res.json() as {
-          session: { messages: Array<{ id: string; role: string; content: string; metadata?: Record<string, unknown> }> };
-        };
-        const loaded: Message[] = data.session.messages.map(m => ({
-          id: m.id,
-          role: m.role as "user" | "assistant",
-          content: m.content,
-          toolUsed: m.metadata?.toolUsed as string | undefined,
-          toolResult: m.metadata?.toolResult as ToolResult,
-          steps: m.metadata?.steps as JarvisStep[] | undefined,
-          needsConfirmation: Boolean(m.metadata?.needsConfirmation),
-          pendingAction: m.metadata?.pendingAction as Message["pendingAction"],
-        }));
-        setMessages(loaded);
-        const lastOpen = [...loaded]
-          .reverse()
-          .find(m => m.needsConfirmation && m.pendingAction && !m.confirmed && !m.denied);
-        if (lastOpen?.pendingAction) setPendingAction(lastOpen.pendingAction);
-      } catch {
-        setMessages([]);
-      } finally {
-        setLoadingHistory(false);
-      }
-    })();
+  const loadHistory = useCallback(async () => {
+    setLoadingHistory(true);
+    setHistoryError(null);
+    setMessages([]);
+    setPendingAction(undefined);
+    setFiles([]);
+    setPresetId(initialPreset ?? "chat");
+    setAttachCaseQuery(initialCaseQuery ?? "");
+
+    const result = await fetchJson<{
+      session: { messages: Array<{ id: string; role: string; content: string; metadata?: Record<string, unknown> }> };
+    }>(`/api/ai/jarvis/sessions/${sessionId}`);
+
+    if (!result.ok) {
+      setHistoryError(
+        result.status === 401
+          ? "Сессия истекла — войдите на /login"
+          : "Не удалось загрузить историю чата",
+      );
+      setLoadingHistory(false);
+      return;
+    }
+
+    const loaded: Message[] = result.data.session.messages.map(m => ({
+      id: m.id,
+      role: m.role as "user" | "assistant",
+      content: m.content,
+      toolUsed: m.metadata?.toolUsed as string | undefined,
+      toolResult: m.metadata?.toolResult as ToolResult,
+      steps: m.metadata?.steps as JarvisStep[] | undefined,
+      needsConfirmation: Boolean(m.metadata?.needsConfirmation),
+      pendingAction: m.metadata?.pendingAction as Message["pendingAction"],
+    }));
+    setMessages(loaded);
+    const lastOpen = [...loaded]
+      .reverse()
+      .find(m => m.needsConfirmation && m.pendingAction && !m.confirmed && !m.denied);
+    if (lastOpen?.pendingAction) setPendingAction(lastOpen.pendingAction);
+    setLoadingHistory(false);
   }, [sessionId, initialPreset, initialCaseQuery]);
+
+  useEffect(() => {
+    void loadHistory();
+  }, [loadHistory]);
 
   const applyActions = useCallback((actions?: JarvisAction[], toolUsed?: string) => {
     if (!actions?.length) return;
@@ -297,7 +307,7 @@ export function JarvisChat({
       form.append("comment", comment);
       for (const f of uploadFiles) form.append("files", f);
 
-      const res = await fetch("/api/ai/jarvis/ingest-case", { method: "POST", body: form });
+      const res = await fetch("/api/ai/jarvis/ingest-case", { method: "POST", credentials: "include", body: form });
       const data = await res.json() as {
         reply?: string;
         error?: string;
@@ -305,7 +315,7 @@ export function JarvisChat({
         case?: { code: string };
       };
 
-      if (data.error) {
+      if (!res.ok || data.error) {
         setMessages(prev => [...prev, {
           id: `e-${Date.now()}`,
           role: "assistant",
@@ -355,7 +365,7 @@ export function JarvisChat({
       form.append("comment", comment);
       for (const f of uploadFiles) form.append("files", f);
 
-      const res = await fetch("/api/ai/jarvis/attach-to-case", { method: "POST", body: form });
+      const res = await fetch("/api/ai/jarvis/attach-to-case", { method: "POST", credentials: "include", body: form });
       const data = await res.json() as {
         reply?: string;
         error?: string;
@@ -363,7 +373,7 @@ export function JarvisChat({
         case?: { code: string };
       };
 
-      if (data.error) {
+      if (!res.ok || data.error) {
         setMessages(prev => [...prev, {
           id: `e-${Date.now()}`,
           role: "assistant",
@@ -427,6 +437,7 @@ export function JarvisChat({
       const res = await fetch("/api/ai/jarvis", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        credentials: "include",
         body: JSON.stringify({
           sessionId,
           messages: history.map(m => ({ role: m.role, content: m.content })),
@@ -447,6 +458,18 @@ export function JarvisChat({
         needsConfirmation?: boolean;
         sessionTitle?: string;
       };
+
+      if (!res.ok) {
+        setMessages(prev => [...prev, {
+          id: `e-${Date.now()}`,
+          role: "assistant",
+          content: res.status === 401
+            ? "Сессия истекла — войдите на /login"
+            : (data.error ?? `Ошибка сервера (${res.status})`),
+          isError: true,
+        }]);
+        return;
+      }
 
       if (data.error) {
         setMessages(prev => [...prev, {
@@ -596,6 +619,18 @@ export function JarvisChat({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
+      {historyError && (
+        <div className="flex items-center justify-between gap-2 border-b border-amber-200 bg-amber-50 px-4 py-2 text-xs text-amber-900 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-100">
+          <span>{historyError}</span>
+          <button
+            type="button"
+            onClick={() => void loadHistory()}
+            className="shrink-0 rounded-md bg-amber-200/80 px-2 py-1 font-medium hover:bg-amber-300 dark:bg-amber-900 dark:hover:bg-amber-800"
+          >
+            Повторить
+          </button>
+        </div>
+      )}
       <div className="flex-1 overflow-y-auto">
         <div className="mx-auto w-full max-w-3xl px-4 py-8">
           {messages.length === 0 && (

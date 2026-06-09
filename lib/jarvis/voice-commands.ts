@@ -392,6 +392,21 @@ function matchAddTask(text: string, opts?: VoiceMatchOptions): VoiceCommand | nu
   return null;
 }
 
+/** «открой реестр дел» / «покажи дела» — Block C3 */
+function matchNavigatePages(text: string): VoiceCommand | null {
+  const t = text.trim().toLowerCase();
+  if (/^(?:открой|покажи|перейди\s+к?)\s*(?:реестр\s+)?дел(?:а|о)?$/.test(t)) {
+    return { toolName: "navigate_to", args: { page: "cases" }, confirmReply: "", instant: true };
+  }
+  if (/^(?:открой|покажи)\s+(?:дашборд|главную|панель|статистику)$/.test(t)) {
+    return { toolName: "navigate_to", args: { page: "dashboard" }, confirmReply: "", instant: true };
+  }
+  if (/^(?:открой|покажи)\s+(?:клиентов|контрагентов)$/.test(t)) {
+    return { toolName: "navigate_to", args: { page: "clients" }, confirmReply: "", instant: true };
+  }
+  return null;
+}
+
 /** «открой дело LC-2026-001» */
 function matchOpenCase(text: string): VoiceCommand | null {
   const m = text.match(/(?:открой|покажи|перейди\s+к)\s+дело\s+(.+)/i);
@@ -456,6 +471,7 @@ export function matchVoiceCommand(text: string, options?: VoiceMatchOptions): Vo
     matchMorningBrief(raw) ??
     matchOverdueAlert(raw) ??
     matchSearchAdilet(raw) ??
+    matchNavigatePages(raw) ??
     matchOpenCase(raw) ??
     matchCaseBrief(raw, options) ??
     matchSimpleCreateCase(raw) ??

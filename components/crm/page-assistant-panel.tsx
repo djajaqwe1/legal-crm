@@ -15,6 +15,8 @@ import { matchRegisterCaseVoice, parseAttachToCaseVoice } from "@/lib/jarvis/voi
 import { extractCaseHintFromPageContext } from "@/lib/jarvis/case-resolve";
 import { JarvisResultCard } from "@/components/crm/jarvis-result-card";
 
+const PANEL_SESSION_KEY = "jarvis-panel-session-id";
+
 type ToolResult = Record<string, unknown> | unknown[] | null;
 
 type PendingAction = { toolName: string; args: Record<string, unknown> };
@@ -42,11 +44,31 @@ export function PageAssistantPanel({ pageContext }: Props) {
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [pendingAction, setPendingAction] = useState<PendingAction | null>(null);
+  const [sessionId, setSessionId] = useState<string | null>(null);
   const endRef = useRef<HTMLDivElement>(null);
   const pendingRef = useRef<PendingAction | null>(null);
+  const sessionIdRef = useRef<string | null>(null);
+  const sendRef = useRef<(text: string, confirmed?: boolean, action?: PendingAction | null) => Promise<void>>(
+    async () => {},
+  );
   const router = useRouter();
 
   pendingRef.current = pendingAction;
+  sessionIdRef.current = sessionId;
+
+  useEffect(() => {
+    const saved = localStorage.getItem(PANEL_SESSION_KEY);
+    if (saved) {
+      setSessionId(saved);
+      sessionIdRef.current = saved;
+    }
+  }, []);
+
+  const persistSessionId = useCallback((id: string) => {
+    setSessionId(id);
+    sessionIdRef.current = id;
+    localStorage.setItem(PANEL_SESSION_KEY, id);
+  }, []);
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -86,7 +108,9 @@ export function PageAssistantPanel({ pageContext }: Props) {
       const res = await fetch("/api/ai/jarvis", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        credentials: "include",
         body: JSON.stringify({
+          sessionId: sessionIdRef.current ?? undefined,
           messages: history.filter(m => m.id !== "init").map(m => ({ role: m.role, content: m.content })),
           confirmed,
           pendingAction: action ?? undefined,
@@ -97,12 +121,27 @@ export function PageAssistantPanel({ pageContext }: Props) {
       const data = await res.json() as {
         reply?: string;
         error?: string;
+        sessionId?: string;
         toolUsed?: string;
         toolResult?: ToolResult;
         actions?: JarvisAction[];
         needsConfirmation?: boolean;
         pendingAction?: PendingAction;
       };
+
+      if (!res.ok) {
+        setMessages(prev => [...prev, {
+          id: (Date.now() + 1).toString(),
+          role: "assistant",
+          content: res.status === 401
+            ? "Сессия истекла — войдите на /login"
+            : `Ошибка: ${data.error ?? res.status}`,
+          isError: true,
+        }]);
+        return;
+      }
+
+      if (data.sessionId) persistSessionId(data.sessionId);
 
       if (data.error) {
         setMessages(prev => [...prev, {
@@ -154,7 +193,9 @@ export function PageAssistantPanel({ pageContext }: Props) {
     } finally {
       setIsLoading(false);
     }
-  }, [messages, isLoading, router, pageContext]);
+  }, [messages, isLoading, router, pageContext, persistSessionId]);
+
+  sendRef.current = sendMessage;
 
   const handleConfirm = useCallback(async () => {
     if (!pendingAction || isLoading) return;
@@ -204,6 +245,7 @@ export function PageAssistantPanel({ pageContext }: Props) {
     }
 
     setInput(text);
+    void sendRef.current(text);
   }, [handleConfirm, handleDeny, router, pageContext]);
 
   const {

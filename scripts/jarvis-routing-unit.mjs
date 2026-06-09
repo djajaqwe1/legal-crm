@@ -32,23 +32,45 @@ function matchHelp(text) {
   );
 }
 
+function matchNavigate(text) {
+  const t = text.trim().toLowerCase();
+  if (/^(?:открой|покажи|перейди\s+к?)\s*(?:реестр\s+)?дел(?:а|о)?$/.test(t)) return "cases";
+  return null;
+}
+
+function parseDeadlinePhrase(phrase) {
+  const MONTHS = { январ: 0, феврал: 1, март: 2, апрел: 3, май: 4, июн: 5, июл: 6, август: 7, сентябр: 8, октябр: 9, ноябр: 10, декабр: 11 };
+  const p = phrase.trim().toLowerCase();
+  for (const [key, monthIdx] of Object.entries(MONTHS)) {
+    const noYear = p.match(new RegExp(`(\\d{1,2})\\s+${key}[a-zа-яё]*(?:\\s|$|,|\\.)`, "i"));
+    if (noYear) return true;
+  }
+  return false;
+}
+
 const cases = [
   { input: "что ты умеешь?", wantHelp: true, wantCase: false },
   { input: "что ты вообще умеешь делать и зачем ты озвучиваешь", wantHelp: true, wantCase: false },
   { input: "что по делу Петрова", wantHelp: false, wantCase: true },
   { input: "кратко по LC-2026-001", wantHelp: false, wantCase: true },
   { input: "что CRM показывает", wantHelp: false, wantCase: false },
+  { input: "открой реестр дел", wantNav: "cases" },
+  { input: "15 июня", wantDate: true },
 ];
 
 let pass = 0;
 for (const c of cases) {
   const help = matchHelp(c.input);
   const brief = matchCaseBrief(c.input);
-  const okHelp = help === c.wantHelp;
-  const okCase = !!brief === c.wantCase;
-  const ok = okHelp && okCase;
+  const nav = matchNavigate(c.input);
+  const date = c.wantDate ? parseDeadlinePhrase(c.input) : null;
+  const okHelp = c.wantHelp === undefined || help === c.wantHelp;
+  const okCase = c.wantCase === undefined || !!brief === c.wantCase;
+  const okNav = c.wantNav === undefined || nav === c.wantNav;
+  const okDate = c.wantDate === undefined || date === c.wantDate;
+  const ok = okHelp && okCase && okNav && okDate;
   if (ok) pass++;
-  console.log(`${ok ? "✓" : "✗"} "${c.input.slice(0, 50)}" help=${help} brief=${!!brief}`);
+  console.log(`${ok ? "✓" : "✗"} "${c.input.slice(0, 50)}" help=${help} brief=${!!brief} nav=${nav ?? "-"} date=${date ?? "-"}`);
 }
 
 console.log(`\n${pass}/${cases.length} routing checks`);

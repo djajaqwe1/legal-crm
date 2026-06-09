@@ -36,9 +36,22 @@ export function parseDeadlinePhrase(phrase: string): string | null {
   }
 
   for (const [key, monthIdx] of Object.entries(MONTHS)) {
-    const m = p.match(new RegExp(`(\\d{1,2})\\s+${key}[a-z]*\\s+(\\d{4})`));
-    if (m) {
-      const d = new Date(Number(m[2]), monthIdx, Number(m[1]));
+    const withYear = p.match(new RegExp(`(\\d{1,2})\\s+${key}[a-zа-яё]*\\s+(\\d{4})`, "i"));
+    if (withYear) {
+      const d = new Date(Number(withYear[2]), monthIdx, Number(withYear[1]));
+      if (!isNaN(d.getTime())) return toIso(d);
+    }
+
+    const noYear = p.match(new RegExp(`(\\d{1,2})\\s+${key}[a-zа-яё]*(?:\\s|$|,|\\.)`, "i"));
+    if (noYear) {
+      const day = Number(noYear[1]);
+      const now = new Date();
+      const year = now.getFullYear();
+      let d = new Date(year, monthIdx, day);
+      const todayStart = new Date(year, now.getMonth(), now.getDate());
+      if (d.getTime() < todayStart.getTime()) {
+        d = new Date(year + 1, monthIdx, day);
+      }
       if (!isNaN(d.getTime())) return toIso(d);
     }
   }
