@@ -14,6 +14,7 @@ import {
   formatCaseDisambiguation,
   resolveCaseQuery,
 } from "@/lib/jarvis/case-resolve";
+import { extractTaskTitleFromChat, getLatestOpenTaskQuery } from "@/lib/jarvis/task-context";
 import { searchLegalGrounding } from "@/lib/legal-grounding/adilet-search";
 import { JARVIS_CAPABILITIES_REPLY } from "@/lib/jarvis/help";
 import { isVoiceConfirm, isVoiceDeny, READ_ONLY_TOOLS } from "@/lib/jarvis/types";
@@ -209,6 +210,16 @@ export async function POST(req: Request) {
     const lastText = lastMsg.content?.trim() || " ";
     const defaultCaseQuery = extractCaseHintFromPageContext(pageContext) ?? undefined;
 
+    const wantsTaskUpdate =
+      /(?:измени|обнови|перенеси|исправь|дополни|скорректируй)\s+(?:эту\s+)?задач|эту\s+задач/i.test(
+        lastText,
+      );
+    let defaultTaskQuery =
+      extractTaskTitleFromChat(messages) ?? undefined;
+    if (wantsTaskUpdate && !defaultTaskQuery && defaultCaseQuery && !offline) {
+      defaultTaskQuery = (await getLatestOpenTaskQuery(wid, defaultCaseQuery)) ?? undefined;
+    }
+
     if (pendingAction && isVoiceDeny(lastText)) {
       const reply = "Действие отменено. Чем ещё помочь?";
       await saveJarvisMessages(handle, [
@@ -263,7 +274,7 @@ export async function POST(req: Request) {
     const snapshot = await buildWorkspaceSnapshot(wid);
     const systemPrompt = buildJarvisSystemPrompt(snapshot, pageContext);
 
-    const voiceCmd = matchVoiceCommand(lastText, { defaultCaseQuery });
+    const voiceCmd = matchVoiceCommand(lastText, { defaultCaseQuery, defaultTaskQuery });
     if (voiceCmd && !voiceConfirmed) {
       if (voiceCmd.instant) {
         const instant = await runInstantVoiceTool(wid, voiceCmd.toolName, voiceCmd.args);
@@ -314,7 +325,7 @@ export async function POST(req: Request) {
       });
     }
 
-    const incompleteHint = matchIncompleteVoiceHint(lastText, { defaultCaseQuery });
+    const incompleteHint = matchIncompleteVoiceHint(lastText, { defaultCaseQuery, defaultTaskQuery });
     if (incompleteHint && !voiceConfirmed) {
       await saveJarvisMessages(handle, [
         { role: "user", content: lastText },

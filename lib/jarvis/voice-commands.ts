@@ -2,7 +2,7 @@
  * Быстрые голосовые команды юриста — без Gemini, с подтверждением для изменений CRM.
  */
 
-import { parseDeadlinePhrase } from "./date-parse";
+import { parseDeadlinePhrase, parseTaskDateTime } from "./date-parse";
 
 export type VoiceCommand = {
   toolName: string;
@@ -15,6 +15,8 @@ export type VoiceCommand = {
 export type VoiceMatchOptions = {
   /** Текущее дело с экрана CRM — для команд без явного «дело X» */
   defaultCaseQuery?: string;
+  /** Последняя задача в чате/деле — для «измени эту задачу» */
+  defaultTaskQuery?: string;
 };
 
 const STATUS_MAP: Record<string, string> = {
@@ -315,7 +317,85 @@ export function matchIncompleteVoiceHint(text: string, opts?: VoiceMatchOptions)
     return "Команда неполная. Опишите подробнее или скажите «что ты умеешь?» — покажу примеры.";
   }
 
+  if (/^(?:измени|обнови|перенеси|исправь|дополни)\s+(?:эту\s+)?задач/i.test(raw)) {
+    return opts?.defaultCaseQuery
+      ? "Уточните, какую задачу изменить, или откройте карточку дела. Например: «измени задачу позвонить клиенту — до 17 июня в 15:00, тел. +7…»"
+      : "Укажите дело и задачу. Например: «измени задачу позвонить клиенту в деле LC-2026-011 — до 17 июня в 15:00 МСК».";
+  }
+
   return null;
+}
+
+/** «измени эту задачу — до 17 июня в 15:00, оставь номер клиента» */
+function matchUpdateTask(text: string, opts?: VoiceMatchOptions): VoiceCommand | null {
+  const isUpdateIntent =
+    /(?:измени|обнови|перенеси|исправь|дополни|скорректируй)\s+(?:эту\s+)?задач/i.test(text) ||
+    /эту\s+задач/i.test(text);
+  if (!isUpdateIntent) return null;
+
+  let taskQuery = opts?.defaultTaskQuery;
+  const named = text.match(
+    /(?:измени|обнови|перенеси|исправь|дополни|скорректируй)\s+задач(?:у|и)\s+[«"]?([^»"—,\n]+?)[»"]?(?:\s+(?:в\s+)?(?:деле\s+)?(.+?))?(?:[,\n]|$)/i,
+  );
+  if (named && !/^эту$/i.test(named[1].trim())) {
+    taskQuery = named[1].trim();
+  }
+
+  let caseQuery = opts?.defaultCaseQuery;
+  const caseByCode = text.match(/\b(LC-\d{4}-\d+)\b/i);
+  if (caseByCode) caseQuery = caseByCode[1];
+  const caseInMsg = text.match(/(?:в\s+)?(?:деле\s+)(?!LC-)(.+?)(?:[,\n]|$)/i);
+  if (caseInMsg && !caseByCode) {
+    const q = caseInMsg[1].trim().replace(/\.$/, "");
+    if (q.length >= 2 && q.length <= 60) caseQuery = q;
+  }
+
+  if (!taskQuery && /эту/i.test(text)) {
+    taskQuery = opts?.defaultTaskQuery;
+  }
+  if (!taskQuery) return null;
+
+  const datetime = parseTaskDateTime(text);
+  const phoneMatch = text.match(/(?:\+7|8)[\d\s()-]{9,}/);
+  const appendClientPhone = /(?:его|клиент).{0,25}номер|оставь\s+(?:его\s+)?номер|номер\s+(?:клиента\s+)?в\s+задач/i.test(
+    text,
+  );
+
+  let title: string | undefined;
+  const needMatch = text.match(/(?:нужно|надо)\s+(.+?)(?:,\s*(?:и\s+)?оставь|\.|$)/i);
+  if (needMatch) {
+    const candidate = needMatch[1].trim().replace(/\s+до\s+\d.+$/i, "").trim();
+    if (candidate.length > 8 && !/^(?:позвонить\s+)?(?:ему|ей|им)$/i.test(candidate)) {
+      title = candidate;
+    }
+  }
+
+  const dueRu = datetime?.dueDate
+    ? new Date(datetime.dueDate).toLocaleDateString("ru-RU")
+    : null;
+  const parts = [
+    title ? `«${title}»` : null,
+    dueRu ? `до ${dueRu}${datetime?.timeLabel ? ` ${datetime.timeLabel}` : ""}` : datetime?.timeLabel ?? null,
+    phoneMatch ? `тел. ${phoneMatch[0].trim()}` : appendClientPhone ? "тел. клиента" : null,
+  ].filter(Boolean);
+
+  return {
+    toolName: "update_task",
+    args: withDefaultCase(
+      {
+        caseQuery,
+        taskQuery,
+        title,
+        dueDate: datetime?.dueDate,
+        dueDateTime: datetime?.dueDateTime,
+        dueTimeLabel: datetime?.timeLabel,
+        phone: phoneMatch?.[0]?.trim(),
+        appendClientPhone: appendClientPhone && !phoneMatch,
+      },
+      opts?.defaultCaseQuery,
+    ),
+    confirmReply: `Обновлю задачу «${taskQuery}»${parts.length ? `: ${parts.join(", ")}` : ""}. Разрешаете?`,
+  };
 }
 
 /** «отметь задачу … выполненной» — два порядка слов */
@@ -535,6 +615,7 @@ export function matchVoiceCommand(text: string, options?: VoiceMatchOptions): Vo
     matchUpdateStatus(raw, options) ??
     matchUpdateDescription(raw, options) ??
     matchCompleteTask(raw, options) ??
+    matchUpdateTask(raw, options) ??
     matchAddTask(raw, options) ??
     matchGenerateForCase(raw, options) ??
     matchApplyChecklist(raw, options) ??
@@ -552,5 +633,6 @@ export const VOICE_COMMAND_EXAMPLES = [
   "Прикрепи документы в дело Иванова",
   "Создай дело для Петрова — консультация по договору",
   "Добавь задачу позвонить клиенту",
+  "Измени эту задачу — до 17 июня в 15:00, оставь номер клиента",
   "Сгенерируй претензию",
 ];

@@ -58,3 +58,45 @@ export function parseDeadlinePhrase(phrase: string): string | null {
 
   return null;
 }
+
+export type ParsedTaskDateTime = {
+  dueDate: string;
+  /** ISO datetime для dueDate в БД (если указано время) */
+  dueDateTime?: string;
+  /** Подпись времени для названия задачи, напр. «15:00 МСК» */
+  timeLabel?: string;
+};
+
+/** Дата и время из фразы юриста: «до 17 июня в 15:00 по московскому». */
+export function parseTaskDateTime(text: string): ParsedTaskDateTime | null {
+  const dateCandidates: string[] = [];
+  const until = text.match(/(?:до|к)\s+(\d{1,2}\s+[а-яё]+(?:\s+\d{4})?|\d{1,2}[.\-/]\d{1,2}(?:[.\-/]\d{2,4})?)/i);
+  if (until?.[1]) dateCandidates.push(until[1]);
+  const dotted = text.match(/(\d{1,2}[.\-/]\d{1,2}(?:[.\-/]\d{2,4})?)/);
+  if (dotted?.[1]) dateCandidates.push(dotted[1]);
+  const monthWord = text.match(/(\d{1,2}\s+[а-яё]+(?:\s+\d{4})?)/i);
+  if (monthWord?.[1]) dateCandidates.push(monthWord[1]);
+
+  let dueDate: string | null = null;
+  for (const phrase of dateCandidates) {
+    dueDate = parseDeadlinePhrase(phrase);
+    if (dueDate) break;
+  }
+  if (!dueDate) return null;
+
+  const timeMatch = text.match(/(?:в\s+)?(\d{1,2})[:.](\d{2})/);
+  if (!timeMatch) return { dueDate };
+
+  const hours = Number(timeMatch[1]);
+  const minutes = Number(timeMatch[2]);
+  if (hours > 23 || minutes > 59) return { dueDate };
+
+  const moscow = /москов/i.test(text);
+  const timeLabel = `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}${moscow ? " МСК" : ""}`;
+  const [year, month, day] = dueDate.split("-").map(Number);
+  const utcHours = moscow ? hours - 3 : hours;
+  const dt = new Date(Date.UTC(year, month - 1, day, utcHours, minutes));
+  if (isNaN(dt.getTime())) return { dueDate, timeLabel };
+
+  return { dueDate, dueDateTime: dt.toISOString(), timeLabel };
+}

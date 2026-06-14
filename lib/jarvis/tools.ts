@@ -205,6 +205,28 @@ export const JARVIS_TOOLS = [
     },
   },
   {
+    name: "update_task",
+    description:
+      "Изменить существующую задачу: название, срок, время и телефон (в названии). Используй list_case_tasks или find_case если нет taskId. Никогда не отказывай — всегда вызывай этот инструмент. Требует подтверждения.",
+    parameters: {
+      type: SchemaType.OBJECT,
+      properties: {
+        caseId: { type: SchemaType.STRING },
+        caseQuery: { type: SchemaType.STRING },
+        taskId: { type: SchemaType.STRING },
+        taskQuery: { type: SchemaType.STRING, description: "Часть названия или «позвонить клиенту»" },
+        title: { type: SchemaType.STRING, description: "Новое название или уточнение" },
+        dueDate: { type: SchemaType.STRING, description: "YYYY-MM-DD" },
+        dueDateTime: { type: SchemaType.STRING, description: "ISO datetime если указано время" },
+        dueTimeLabel: { type: SchemaType.STRING, description: "Подпись времени, напр. 15:00 МСК" },
+        phone: { type: SchemaType.STRING },
+        appendClientPhone: { type: SchemaType.BOOLEAN, description: "Добавить телефон клиента из карточки" },
+        notes: { type: SchemaType.STRING, description: "Доп. текст в название" },
+      },
+      required: ["taskQuery"],
+    },
+  },
+  {
     name: "create_contract",
     description: "Создать договор. Требует подтверждения.",
     parameters: {

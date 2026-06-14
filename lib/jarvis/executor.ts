@@ -56,6 +56,47 @@ async function resolveCaseId(
   return { caseId: resolved.case.id, caseCode: resolved.case.code };
 }
 
+async function resolveTaskInCase(
+  caseId: string,
+  args: { taskId?: string; taskQuery?: string },
+): Promise<{ task: { id: string; title: string; dueDate: Date | null } } | { error: string }> {
+  const { taskId, taskQuery } = args;
+  let task = taskId
+    ? await prisma.task.findFirst({ where: { id: taskId, legalCaseId: caseId } })
+    : null;
+
+  if (!task && taskQuery) {
+    const q = taskQuery.toLowerCase().trim();
+    const candidates = await prisma.task.findMany({
+      where: { legalCaseId: caseId, completed: false },
+      orderBy: { createdAt: "desc" },
+    });
+    task =
+      candidates.find(t => t.title.toLowerCase() === q) ??
+      candidates.find(t => t.title.toLowerCase().includes(q)) ??
+      candidates.find(t => q.includes(t.title.toLowerCase().slice(0, 12))) ??
+      (candidates.length === 1 ? candidates[0] : null);
+  }
+
+  if (!task) {
+    return { error: `Задача «${taskQuery ?? taskId ?? "—"}» не найдена` };
+  }
+  return { task };
+}
+
+function appendToTaskTitle(title: string, fragment: string): string {
+  const t = title.trim();
+  const f = fragment.trim();
+  if (!f || t.toLowerCase().includes(f.toLowerCase())) return t;
+  return `${t} — ${f}`;
+}
+
+function applyPhoneToTitle(title: string, phone: string): string {
+  const normalized = phone.trim();
+  if (!normalized || title.includes(normalized)) return title;
+  return appendToTaskTitle(title, `тел. ${normalized}`);
+}
+
 function buildDocumentContextFromCase(
   documents: Array<{ name: string; extractedText: string | null }>,
   maxChars = 10_000,
@@ -194,25 +235,11 @@ export async function executeJarvisTool(
     if ("error" in resolved) return { success: false, message: resolved.error };
     const { caseId, caseCode } = resolved;
 
-    let task = taskId
-      ? await prisma.task.findFirst({ where: { id: taskId, legalCaseId: caseId } })
-      : null;
-
-    if (!task && taskQuery) {
-      const q = taskQuery.toLowerCase();
-      const candidates = await prisma.task.findMany({
-        where: { legalCaseId: caseId, completed: false },
-      });
-      task =
-        candidates.find(t => t.title.toLowerCase() === q) ??
-        candidates.find(t => t.title.toLowerCase().includes(q)) ??
-        candidates.find(t => q.includes(t.title.toLowerCase().slice(0, 12))) ??
-        null;
+    const taskResult = await resolveTaskInCase(caseId, { taskId, taskQuery });
+    if ("error" in taskResult) {
+      return { success: false, message: `${taskResult.error} (${caseCode})` };
     }
-
-    if (!task) {
-      return { success: false, message: `Задача «${taskQuery ?? taskId}» не найдена в ${caseCode}` };
-    }
+    const task = taskResult.task;
 
     await prisma.task.update({ where: { id: task.id }, data: { completed: true } });
     actions.push({ type: "navigate", path: `/admin/cases/${caseId}` });
@@ -221,6 +248,87 @@ export async function executeJarvisTool(
       success: true,
       data: { id: task.id, title: task.title, caseCode },
       message: `Задача «${task.title}» отмечена выполненной (${caseCode})`,
+      actions,
+    };
+  }
+
+  if (toolName === "update_task") {
+    const {
+      title,
+      dueDate,
+      dueDateTime,
+      dueTimeLabel,
+      phone,
+      appendClientPhone,
+      notes,
+      taskQuery,
+      taskId,
+    } = args as {
+      title?: string;
+      dueDate?: string;
+      dueDateTime?: string;
+      dueTimeLabel?: string;
+      phone?: string;
+      appendClientPhone?: boolean;
+      notes?: string;
+      taskQuery?: string;
+      taskId?: string;
+    };
+    const resolved = await resolveCaseId(workspaceId, args);
+    if ("error" in resolved) return { success: false, message: resolved.error };
+    const { caseId, caseCode } = resolved;
+
+    const taskResult = await resolveTaskInCase(caseId, { taskId, taskQuery });
+    if ("error" in taskResult) {
+      return { success: false, message: `${taskResult.error} (${caseCode})` };
+    }
+    const task = taskResult.task;
+
+    let newTitle = task.title;
+    if (title?.trim()) {
+      newTitle = title.trim();
+    }
+    if (dueTimeLabel) {
+      newTitle = appendToTaskTitle(newTitle, dueTimeLabel);
+    }
+    if (phone?.trim()) {
+      newTitle = applyPhoneToTitle(newTitle, phone.trim());
+    }
+    if (appendClientPhone) {
+      const legalCase = await prisma.legalCase.findFirst({
+        where: { id: caseId, workspaceId },
+        include: { client: { select: { phone: true } } },
+      });
+      if (legalCase?.client?.phone) {
+        newTitle = applyPhoneToTitle(newTitle, legalCase.client.phone);
+      }
+    }
+    if (notes?.trim()) {
+      newTitle = appendToTaskTitle(newTitle, notes.trim());
+    }
+
+    let newDueDate: Date | null = task.dueDate;
+    if (dueDateTime?.trim()) {
+      const parsed = new Date(dueDateTime);
+      if (!isNaN(parsed.getTime())) newDueDate = parsed;
+    } else if (dueDate?.trim()) {
+      const parsed = new Date(dueDate);
+      if (!isNaN(parsed.getTime())) newDueDate = parsed;
+    }
+
+    const updated = await prisma.task.update({
+      where: { id: task.id },
+      data: { title: newTitle, dueDate: newDueDate },
+    });
+    actions.push({ type: "navigate", path: `/admin/cases/${caseId}` });
+    actions.push({ type: "refresh" });
+    const dueRu = updated.dueDate
+      ? new Date(updated.dueDate).toLocaleString("ru-RU", { dateStyle: "short", timeStyle: "short" })
+      : null;
+    return {
+      success: true,
+      data: { id: updated.id, title: updated.title, dueDate: updated.dueDate, caseCode },
+      message: `Задача «${updated.title}» обновлена (${caseCode})${dueRu ? `, срок ${dueRu}` : ""}`,
       actions,
     };
   }
@@ -852,6 +960,15 @@ export function buildConfirmText(toolName: string, args: Record<string, unknown>
   }
   if (toolName === "complete_task") {
     return `🔒 ${label}\n\nОтмечу задачу «${args.taskQuery ?? args.taskId}» выполненной в деле «${args.caseQuery ?? args.caseId}».\n\nРазрешаете?`;
+  }
+  if (toolName === "update_task") {
+    const parts = [
+      args.title ? `название → «${args.title}»` : null,
+      args.dueDate ? `срок → ${args.dueDate}${args.dueTimeLabel ? ` (${args.dueTimeLabel})` : ""}` : args.dueTimeLabel ? `время → ${args.dueTimeLabel}` : null,
+      args.phone ? `тел. ${args.phone}` : args.appendClientPhone ? "тел. клиента из карточки" : null,
+      args.notes ? `примечание: ${args.notes}` : null,
+    ].filter(Boolean);
+    return `🔒 ${label}\n\nОбновлю задачу «${args.taskQuery ?? args.taskId}»${parts.length ? `:\n• ${parts.join("\n• ")}` : ""}.\n\nРазрешаете?`;
   }
   return `🔒 Запрос на действие: ${label}\n\nПараметры: ${JSON.stringify(args, null, 0).slice(0, 200)}\n\nРазрешаете?`;
 }

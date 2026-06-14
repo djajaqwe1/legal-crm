@@ -62,7 +62,15 @@ const cases = [
   { input: "открой реестр дел", wantNav: "cases" },
   { input: "15 июня", wantDate: true },
   { input: "обнови дедлайн", wantIncomplete: true },
+  { input: "измени эту задачу", wantUpdateTask: true },
 ];
+
+function matchUpdateTask(text) {
+  return (
+    /(?:измени|обнови|перенеси|исправь|дополни|скорректируй)\s+(?:эту\s+)?задач/i.test(text) ||
+    /эту\s+задач/i.test(text)
+  );
+}
 
 let pass = 0;
 for (const c of cases) {
@@ -71,12 +79,14 @@ for (const c of cases) {
   const nav = matchNavigate(c.input);
   const date = c.wantDate ? parseDeadlinePhrase(c.input) : null;
   const incomplete = c.wantIncomplete ? matchIncompleteHint(c.input) : null;
+  const updateTask = c.wantUpdateTask ? matchUpdateTask(c.input) : null;
   const okHelp = c.wantHelp === undefined || help === c.wantHelp;
   const okCase = c.wantCase === undefined || !!brief === c.wantCase;
   const okNav = c.wantNav === undefined || nav === c.wantNav;
   const okDate = c.wantDate === undefined || date === c.wantDate;
   const okIncomplete = c.wantIncomplete === undefined || incomplete === c.wantIncomplete;
-  const ok = okHelp && okCase && okNav && okDate && okIncomplete;
+  const okUpdateTask = c.wantUpdateTask === undefined || updateTask === c.wantUpdateTask;
+  const ok = okHelp && okCase && okNav && okDate && okIncomplete && okUpdateTask;
   if (ok) pass++;
   console.log(`${ok ? "✓" : "✗"} "${c.input.slice(0, 50)}" help=${help} brief=${!!brief} nav=${nav ?? "-"} date=${date ?? "-"}`);
 }
