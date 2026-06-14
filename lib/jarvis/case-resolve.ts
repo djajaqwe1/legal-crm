@@ -43,6 +43,36 @@ export type CaseResolveResult =
   | { type: "ambiguous"; cases: CaseRow[]; query: string }
   | { type: "not_found"; query: string };
 
+const CASE_CODE_RE = /^LC-\d{4}-\d+$/i;
+
+/** Код дела вида LC-2026-011 — не путать с Prisma id (cuid). */
+export function isCaseCode(value: string): boolean {
+  return CASE_CODE_RE.test(value.trim());
+}
+
+/** Gemini иногда кладёт код дела в caseId — приводим к реальному id. */
+export async function normalizeCaseArgs(
+  workspaceId: string,
+  args: Record<string, unknown>,
+): Promise<{ args: Record<string, unknown> } | { error: string }> {
+  const next = { ...args };
+  const rawId = typeof next.caseId === "string" ? next.caseId.trim() : "";
+  if (!rawId) return { args: next };
+
+  if (isCaseCode(rawId)) {
+    const resolved = await resolveCaseQuery(workspaceId, rawId);
+    if (resolved.type === "not_found") {
+      return { error: `Дело «${rawId}» не найдено. Уточните код LC-2026-XXX.` };
+    }
+    if (resolved.type === "ambiguous") return { error: formatCaseDisambiguation(resolved.cases) };
+    next.caseId = resolved.case.id;
+    delete next.caseQuery;
+    return { args: next };
+  }
+
+  return { args: next };
+}
+
 export async function resolveCaseQuery(
   workspaceId: string,
   query: string,

@@ -1,5 +1,6 @@
 import { JARVIS_TOOLS } from "./tools";
 import { executeJarvisTool, buildConfirmText } from "./executor";
+import { normalizeCaseArgs } from "./case-resolve";
 import { createGeminiToolChat } from "@/lib/llm/router";
 import { MUTATING_TOOLS, READ_ONLY_TOOLS, type JarvisAction, type JarvisStep } from "./types";
 
@@ -132,7 +133,17 @@ export async function executeConfirmedAction(
   toolName: string,
   args: Record<string, unknown>,
 ): Promise<AgentRunResult> {
-  const result = await executeJarvisTool(workspaceId, toolName, args);
+  const normalized = await normalizeCaseArgs(workspaceId, args);
+  if ("error" in normalized) {
+    return {
+      reply: normalized.error,
+      steps: [{ tool: toolName, message: normalized.error, success: false }],
+      actions: [],
+      toolUsed: toolName,
+      needsConfirmation: false,
+    };
+  }
+  const result = await executeJarvisTool(workspaceId, toolName, normalized.args);
   return {
     reply: result.message,
     steps: [{ tool: toolName, message: result.message, success: result.success }],

@@ -15,7 +15,7 @@ import type { JarvisAction, JarvisToolResult } from "./types";
 import { buildFallbackDocument } from "./document-fallback";
 import { JARVIS_CAPABILITIES_REPLY } from "./help";
 import { guardOfflineTool } from "./offline-tools";
-import { formatCaseDisambiguation, resolveCaseQuery } from "./case-resolve";
+import { formatCaseDisambiguation, resolveCaseQuery, isCaseCode } from "./case-resolve";
 
 const GEMINI_KEY = process.env.GEMINI_API_KEY ?? "";
 
@@ -40,12 +40,22 @@ async function resolveCaseId(
   args: Record<string, unknown>,
 ): Promise<{ caseId: string; caseCode: string } | { error: string }> {
   if (typeof args.caseId === "string" && args.caseId.trim()) {
+    const raw = args.caseId.trim();
+    if (isCaseCode(raw)) {
+      const resolved = await resolveCaseQuery(workspaceId, raw);
+      if (resolved.type === "not_found") return { error: `Дело «${raw}» не найдено` };
+      if (resolved.type === "ambiguous") return { error: formatCaseDisambiguation(resolved.cases) };
+      return { caseId: resolved.case.id, caseCode: resolved.case.code };
+    }
     const c = await prisma.legalCase.findFirst({
-      where: { id: args.caseId.trim(), workspaceId },
+      where: { id: raw, workspaceId },
       select: { id: true, code: true },
     });
-    if (!c) return { error: "Дело не найдено" };
-    return { caseId: c.id, caseCode: c.code };
+    if (c) return { caseId: c.id, caseCode: c.code };
+    const resolved = await resolveCaseQuery(workspaceId, raw);
+    if (resolved.type === "found") return { caseId: resolved.case.id, caseCode: resolved.case.code };
+    if (resolved.type === "ambiguous") return { error: formatCaseDisambiguation(resolved.cases) };
+    return { error: "Дело не найдено" };
   }
   const q = typeof args.caseQuery === "string" ? args.caseQuery : "";
   if (!q.trim()) return { error: "Укажите дело" };

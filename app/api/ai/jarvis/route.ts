@@ -12,6 +12,7 @@ import { matchVoiceCommand, matchIncompleteVoiceHint } from "@/lib/jarvis/voice-
 import {
   extractCaseHintFromPageContext,
   formatCaseDisambiguation,
+  normalizeCaseArgs,
   resolveCaseQuery,
 } from "@/lib/jarvis/case-resolve";
 import { extractTaskTitleFromChat, getLatestOpenTaskQuery } from "@/lib/jarvis/task-context";
@@ -44,6 +45,10 @@ async function resolveVoiceCaseArgs(
   workspaceId: string,
   args: Record<string, unknown>,
 ): Promise<{ args: Record<string, unknown> } | { error: string }> {
+  const codeNorm = await normalizeCaseArgs(workspaceId, args);
+  if ("error" in codeNorm) return codeNorm;
+  args = codeNorm.args;
+
   if (typeof args.caseId === "string" && args.caseId.trim()) {
     return { args };
   }
