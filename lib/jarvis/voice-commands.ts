@@ -44,6 +44,18 @@ function withDefaultCase(args: Record<string, unknown>, defaultCaseQuery?: strin
   return args;
 }
 
+/** «выполненной» / «закрытой» в конце фразы — не название дела. */
+const TASK_DONE_SUFFIX =
+  /\s+(?:как\s+)?(?:выполненн(?:ой|ая|ую|a)?|выполнено|закрыт(?:ой|ая|ую)?|готов(?:ой|ая|ую)?|done)\s*\.?$/i;
+
+function stripTaskDoneSuffix(text: string): string {
+  return text.replace(TASK_DONE_SUFFIX, "").trim();
+}
+
+function isCompleteTaskIntent(text: string): boolean {
+  return /(?:отметь|закрой|выполни|заверш)\s+(?:эту\s+)?задач/i.test(text);
+}
+
 /** «мой рабочий день» / «что горит» */
 function matchMorningBrief(text: string): VoiceCommand | null {
   if (/рабоч(ий|его)\s+день|мой\s+день|что\s+горит|что\s+срочно|план\s+на\s+день/.test(text.toLowerCase())) {
@@ -398,30 +410,67 @@ function matchUpdateTask(text: string, opts?: VoiceMatchOptions): VoiceCommand |
   };
 }
 
-/** «отметь задачу … выполненной» — два порядка слов */
+/** «отметь задачу позвонить выполненной» — «выполненной» не путать с делом */
 function matchCompleteTask(text: string, opts?: VoiceMatchOptions): VoiceCommand | null {
-  const m1 = text.match(
-    /(?:отметь|закрой|выполни|заверш)\s+задач(?:у|и)\s+[«"]?(.+?)[»"]?\s+(?:в\s+)?(?:деле\s+)?(.+)/i,
-  );
-  if (m1) {
+  if (!isCompleteTaskIntent(text)) return null;
+
+  if (
+    /^(?:отметь|закрой|выполни|заверш)\s+(?:эту\s+)?задач(?:у|и)?\s*(?:как\s+)?(?:выполненн|закрыт|готов)/i.test(
+      text.trim(),
+    )
+  ) {
+    const taskQuery = opts?.defaultTaskQuery;
+    if (!taskQuery || !opts?.defaultCaseQuery) return null;
     return {
       toolName: "complete_task",
-      args: { caseQuery: m1[2].trim(), taskQuery: m1[1].trim() },
-      confirmReply: `Отмечу задачу «${m1[1].trim()}» выполненной в деле «${m1[2].trim()}». Разрешаете?`,
+      args: withDefaultCase({ taskQuery }, opts.defaultCaseQuery),
+      confirmReply: `Отмечу задачу «${taskQuery}» выполненной. Разрешаете?`,
     };
   }
-  const m2 = text.match(
-    /(?:в\s+)?(?:деле\s+)?(.+?)\s+(?:отметь|закрой|выполни)\s+задач(?:у|и)\s+[«"]?(.+?)[»"]?$/i,
+
+  const withCase = text.match(
+    /(?:отметь|закрой|выполни|заверш)\s+задач(?:у|и)\s+[«"]?(.+?)[»"]?\s+(?:в\s+)(?:деле\s+)?(.+)/i,
   );
-  if (m2) {
-    const caseQuery = m2[1].trim() || opts?.defaultCaseQuery;
-    if (!caseQuery) return null;
+  if (withCase) {
+    const taskQuery = stripTaskDoneSuffix(withCase[1].trim());
+    const caseQuery = stripTaskDoneSuffix(withCase[2].trim());
+    if (taskQuery && caseQuery && !/^выполненн|^закрыт|^готов/i.test(caseQuery)) {
+      return {
+        toolName: "complete_task",
+        args: withDefaultCase({ caseQuery, taskQuery }, opts?.defaultCaseQuery),
+        confirmReply: `Отмечу задачу «${taskQuery}» выполненной в деле «${caseQuery}». Разрешаете?`,
+      };
+    }
+  }
+
+  const simple = text.match(
+    /(?:отметь|закрой|выполни|заверш)\s+задач(?:у|и)\s+[«"]?(.+)[»"]?\s*$/i,
+  );
+  if (simple) {
+    let taskQuery = stripTaskDoneSuffix(simple[1].trim());
+    if (!taskQuery) taskQuery = opts?.defaultTaskQuery ?? "";
+    if (!taskQuery || !opts?.defaultCaseQuery) return null;
     return {
       toolName: "complete_task",
-      args: { caseQuery, taskQuery: m2[2].trim() },
-      confirmReply: `Отмечу задачу «${m2[2].trim()}» выполненной в деле «${caseQuery}». Разрешаете?`,
+      args: withDefaultCase({ taskQuery }, opts.defaultCaseQuery),
+      confirmReply: `Отмечу задачу «${taskQuery}» выполненной. Разрешаете?`,
     };
   }
+
+  const reversed = text.match(
+    /(?:в\s+)?(?:деле\s+)?(.+?)\s+(?:отметь|закрой|выполни|заверш)\s+задач(?:у|и)\s+[«"]?(.+?)[»"]?\s*$/i,
+  );
+  if (reversed) {
+    const caseQuery = reversed[1].trim() || opts?.defaultCaseQuery;
+    const taskQuery = stripTaskDoneSuffix(reversed[2].trim());
+    if (!caseQuery || !taskQuery) return null;
+    return {
+      toolName: "complete_task",
+      args: withDefaultCase({ caseQuery, taskQuery }, opts?.defaultCaseQuery),
+      confirmReply: `Отмечу задачу «${taskQuery}» выполненной в деле «${caseQuery}». Разрешаете?`,
+    };
+  }
+
   return null;
 }
 

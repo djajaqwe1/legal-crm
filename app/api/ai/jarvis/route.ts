@@ -215,13 +215,13 @@ export async function POST(req: Request) {
     const lastText = lastMsg.content?.trim() || " ";
     const defaultCaseQuery = extractCaseHintFromPageContext(pageContext) ?? undefined;
 
-    const wantsTaskUpdate =
-      /(?:измени|обнови|перенеси|исправь|дополни|скорректируй)\s+(?:эту\s+)?задач|эту\s+задач/i.test(
+    const wantsTaskContext =
+      /(?:измени|обнови|перенеси|исправь|дополни|скорректируй)\s+(?:эту\s+)?задач|эту\s+задач|(?:отметь|закрой|выполни|заверш)\s+(?:эту\s+)?задач/i.test(
         lastText,
       );
     let defaultTaskQuery =
       extractTaskTitleFromChat(messages) ?? undefined;
-    if (wantsTaskUpdate && !defaultTaskQuery && defaultCaseQuery && !offline) {
+    if (wantsTaskContext && !defaultTaskQuery && defaultCaseQuery && !offline) {
       defaultTaskQuery = (await getLatestOpenTaskQuery(wid, defaultCaseQuery)) ?? undefined;
     }
 

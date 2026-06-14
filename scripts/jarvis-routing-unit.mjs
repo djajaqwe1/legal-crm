@@ -63,6 +63,7 @@ const cases = [
   { input: "15 июня", wantDate: true },
   { input: "обнови дедлайн", wantIncomplete: true },
   { input: "измени эту задачу", wantUpdateTask: true },
+  { input: "отметь задачу позвонить выполненной", wantCompleteTask: true, taskQuery: "позвонить" },
 ];
 
 function matchUpdateTask(text) {
@@ -70,6 +71,19 @@ function matchUpdateTask(text) {
     /(?:измени|обнови|перенеси|исправь|дополни|скорректируй)\s+(?:эту\s+)?задач/i.test(text) ||
     /эту\s+задач/i.test(text)
   );
+}
+
+function matchCompleteTask(text) {
+  if (!/(?:отметь|закрой|выполни|заверш)\s+(?:эту\s+)?задач/i.test(text)) return null;
+  const simple = text.match(
+    /(?:отметь|закрой|выполни|заверш)\s+задач(?:у|и)\s+[«"]?(.+)[»"]?\s*$/i,
+  );
+  if (!simple) return null;
+  const taskQuery = simple[1]
+    .trim()
+    .replace(/\s+(?:как\s+)?(?:выполненн(?:ой|ая|ую|a)?|выполнено|закрыт(?:ой|ая|ую)?|done)\s*\.?$/i, "")
+    .trim();
+  return { taskQuery };
 }
 
 let pass = 0;
@@ -80,13 +94,17 @@ for (const c of cases) {
   const date = c.wantDate ? parseDeadlinePhrase(c.input) : null;
   const incomplete = c.wantIncomplete ? matchIncompleteHint(c.input) : null;
   const updateTask = c.wantUpdateTask ? matchUpdateTask(c.input) : null;
+  const completeTask = c.wantCompleteTask ? matchCompleteTask(c.input) : null;
   const okHelp = c.wantHelp === undefined || help === c.wantHelp;
   const okCase = c.wantCase === undefined || !!brief === c.wantCase;
   const okNav = c.wantNav === undefined || nav === c.wantNav;
   const okDate = c.wantDate === undefined || date === c.wantDate;
   const okIncomplete = c.wantIncomplete === undefined || incomplete === c.wantIncomplete;
   const okUpdateTask = c.wantUpdateTask === undefined || updateTask === c.wantUpdateTask;
-  const ok = okHelp && okCase && okNav && okDate && okIncomplete && okUpdateTask;
+  const okCompleteTask =
+    c.wantCompleteTask === undefined ||
+    (completeTask?.taskQuery === c.taskQuery && !completeTask?.taskQuery?.includes("выполненн"));
+  const ok = okHelp && okCase && okNav && okDate && okIncomplete && okUpdateTask && okCompleteTask;
   if (ok) pass++;
   console.log(`${ok ? "✓" : "✗"} "${c.input.slice(0, 50)}" help=${help} brief=${!!brief} nav=${nav ?? "-"} date=${date ?? "-"}`);
 }
