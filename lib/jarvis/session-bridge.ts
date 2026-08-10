@@ -6,8 +6,8 @@ import {
 } from "@/lib/jarvis/sessions";
 import {
   appendOfflineJarvisMessages,
-  createOfflineJarvisSession,
-  getOfflineJarvisSession,
+  ensureOfflineJarvisSession,
+  isOfflineJarvisSessionId,
   updateOfflineJarvisSession,
 } from "@/lib/jarvis/offline-sessions";
 
@@ -28,33 +28,44 @@ export async function ensureJarvisSession(rawSessionId?: string | null): Promise
 > {
   const wid = await resolveWorkspaceId();
 
-  if (wid) {
-    let sessionId = rawSessionId ?? undefined;
-    if (!sessionId) {
-      const created = await createJarvisSession(wid, "Новый чат");
-      sessionId = created.id;
-    }
-    const session = await getJarvisSession(wid, sessionId);
-    if (!session) return { error: "Сессия не найдена", status: 404 };
+  if (!wid) {
+    const session = ensureOfflineJarvisSession(rawSessionId ?? undefined);
     return {
-      offline: false,
-      workspaceId: wid,
-      sessionId,
+      offline: true,
+      workspaceId: "offline-workspace",
+      sessionId: session.id,
       userMessageCount: countUserMessages(session),
       title: session.title,
     };
   }
 
+  if (rawSessionId && isOfflineJarvisSessionId(rawSessionId)) {
+    const created = await createJarvisSession(wid, "Новый чат");
+    return {
+      offline: false,
+      workspaceId: wid,
+      sessionId: created.id,
+      userMessageCount: 0,
+      title: created.title,
+    };
+  }
+
   let sessionId = rawSessionId ?? undefined;
   if (!sessionId) {
-    sessionId = createOfflineJarvisSession("Новый чат").id;
+    const created = await createJarvisSession(wid, "Новый чат");
+    sessionId = created.id;
   }
-  const session = getOfflineJarvisSession(sessionId);
-  if (!session) return { error: "Сессия не найдена", status: 404 };
+  let session = await getJarvisSession(wid, sessionId);
+  if (!session) {
+    const created = await createJarvisSession(wid, "Новый чат");
+    sessionId = created.id;
+    session = await getJarvisSession(wid, sessionId);
+  }
+  if (!session) return { error: "Не удалось создать чат", status: 503 };
 
   return {
-    offline: true,
-    workspaceId: "offline-workspace",
+    offline: false,
+    workspaceId: wid,
     sessionId,
     userMessageCount: countUserMessages(session),
     title: session.title,

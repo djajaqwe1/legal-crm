@@ -213,6 +213,7 @@ export function JarvisWorkspace() {
           autoRunPreset={autoRunPreset}
           onSessionActivity={() => void refreshSessions()}
           onSessionTitle={(title) => handleSessionRenamed(sessionId, title)}
+          onSessionIdChange={setSessionId}
         />
       </div>
 

@@ -40,6 +40,7 @@ type Props = {
   pageContext?: string;
   onSessionActivity?: () => void;
   onSessionTitle?: (title: string) => void;
+  onSessionIdChange?: (sessionId: string) => void;
 };
 
 const SUGGESTIONS = VOICE_COMMAND_EXAMPLES.slice(0, 6);
@@ -208,6 +209,7 @@ export function JarvisChat({
   pageContext,
   onSessionActivity,
   onSessionTitle,
+  onSessionIdChange,
 }: Props) {
   const router = useRouter();
   const [messages, setMessages] = useState<Message[]>([]);
@@ -478,6 +480,7 @@ export function JarvisChat({
         pendingAction?: Message["pendingAction"];
         needsConfirmation?: boolean;
         sessionTitle?: string;
+        sessionId?: string;
       };
 
       if (!res.ok) {
@@ -522,6 +525,7 @@ export function JarvisChat({
       }
 
       if (data.sessionTitle) onSessionTitle?.(data.sessionTitle);
+      if (data.sessionId && data.sessionId !== sessionId) onSessionIdChange?.(data.sessionId);
       onSessionActivity?.();
     } catch {
       setMessages(prev => [...prev, {
@@ -534,7 +538,7 @@ export function JarvisChat({
       setIsLoading(false);
       setLoadingHint("Думаю…");
     }
-  }, [messages, isLoading, sessionId, pageContext, applyActions, onSessionActivity, onSessionTitle]);
+  }, [messages, isLoading, sessionId, pageContext, applyActions, onSessionActivity, onSessionTitle, onSessionIdChange]);
 
   sendRef.current = sendMessage;
 

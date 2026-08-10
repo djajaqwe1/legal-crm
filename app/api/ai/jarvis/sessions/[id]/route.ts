@@ -7,6 +7,7 @@ import {
 } from "@/lib/jarvis/sessions";
 import {
   deleteOfflineJarvisSession,
+  ensureOfflineJarvisSession,
   getOfflineJarvisSession,
   isOfflineJarvisSessionId,
   updateOfflineJarvisSession,
@@ -21,8 +22,7 @@ export async function GET(_req: Request, { params }: Params) {
   const wid = await resolveWorkspaceId();
 
   if (!wid || isOfflineJarvisSessionId(id)) {
-    const session = getOfflineJarvisSession(id);
-    if (!session) return NextResponse.json({ error: "Сессия не найдена" }, { status: 404 });
+    const session = ensureOfflineJarvisSession(id);
     return NextResponse.json({
       session: {
         id: session.id,

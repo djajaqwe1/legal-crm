@@ -20,7 +20,14 @@ export type OfflineJarvisSession = {
   messages: OfflineJarvisMessage[];
 };
 
-const sessions = new Map<string, OfflineJarvisSession>();
+const sessions: Map<string, OfflineJarvisSession> =
+  (globalThis as typeof globalThis & { __jarvisOfflineSessions?: Map<string, OfflineJarvisSession> })
+    .__jarvisOfflineSessions ?? new Map();
+
+if (process.env.NODE_ENV !== "production") {
+  (globalThis as typeof globalThis & { __jarvisOfflineSessions?: Map<string, OfflineJarvisSession> }).__jarvisOfflineSessions =
+    sessions;
+}
 
 function touch(session: OfflineJarvisSession) {
   session.updatedAt = new Date();
@@ -52,6 +59,30 @@ export function createOfflineJarvisSession(title = "Новый чат"): Offline
   };
   sessions.set(id, session);
   return session;
+}
+
+/** Восстановить offline-сессию после HMR / перезапуска dev-сервера. */
+export function ensureOfflineJarvisSession(
+  sessionId?: string,
+  title = "Новый чат",
+): OfflineJarvisSession {
+  if (sessionId) {
+    const existing = sessions.get(sessionId);
+    if (existing) return existing;
+    if (isOfflineJarvisSessionId(sessionId)) {
+      const session: OfflineJarvisSession = {
+        id: sessionId,
+        title,
+        pinned: false,
+        project: null,
+        updatedAt: new Date(),
+        messages: [],
+      };
+      sessions.set(sessionId, session);
+      return session;
+    }
+  }
+  return createOfflineJarvisSession(title);
 }
 
 export function getOfflineJarvisSession(sessionId: string): OfflineJarvisSession | null {
